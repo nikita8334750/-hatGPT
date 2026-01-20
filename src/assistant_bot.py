@@ -248,6 +248,11 @@ class SmartAssistant:
             "  second-order <тема>            - последствия второго порядка\n"
             "  tradeoff <тема>                - карта компромиссов\n"
             "  signal <тема>                  - сигналы и триггеры\n"
+            "  boundary <тема>                - границы и условия\n"
+            "  options <тема>                 - карта вариантов\n"
+            "  priority <тема>                - расстановка приоритетов\n"
+            "  reverse-plan <тема>            - план от цели назад\n"
+            "  checklist <тема>               - проверочный список\n"
             "  exit                          - выйти\n"
         )
 
@@ -562,6 +567,77 @@ def handle_signal(bot: SmartAssistant, args: list[str]) -> str:
     return "\n".join(lines)
 
 
+def handle_boundary(bot: SmartAssistant, args: list[str]) -> str:
+    if not args:
+        return "Укажите тему для определения границ."
+    topic = " ".join(args)
+    lines = [
+        "Границы и условия:",
+        f"- Что точно нельзя делать в «{topic}»?",
+        f"- Какие обязательные условия для «{topic}»?",
+        f"- Где граница качества/сроков в «{topic}»?",
+        f"- Какие ресурсы критичны для «{topic}»?",
+    ]
+    return "\n".join(lines)
+
+
+def handle_options(bot: SmartAssistant, args: list[str]) -> str:
+    if not args:
+        return "Укажите тему для карты вариантов."
+    topic = " ".join(args)
+    lines = [
+        "Карта вариантов:",
+        f"- Минимальный вариант для «{topic}».",
+        f"- Оптимальный вариант для «{topic}».",
+        f"- Максимальный вариант для «{topic}».",
+        f"- Вариант с партнёром для «{topic}».",
+        f"- Вариант с автоматизацией для «{topic}».",
+    ]
+    return "\n".join(lines)
+
+
+def handle_priority(bot: SmartAssistant, args: list[str]) -> str:
+    if not args:
+        return "Укажите тему для приоритизации."
+    topic = " ".join(args)
+    lines = [
+        "Приоритеты:",
+        f"- Что даёт 80% эффекта в «{topic}»?",
+        f"- Что можно отложить в «{topic}» без риска?",
+        f"- Какие 3 шага критичны для «{topic}»?",
+        f"- Что можно делегировать в «{topic}»?",
+    ]
+    return "\n".join(lines)
+
+
+def handle_reverse_plan(bot: SmartAssistant, args: list[str]) -> str:
+    if not args:
+        return "Укажите тему для обратного планирования."
+    topic = " ".join(args)
+    lines = [
+        "План от цели назад:",
+        f"- Конечный результат для «{topic}».",
+        f"- Что должно быть готово за шаг до результата «{topic}»?",
+        f"- Какие ресурсы нужны за два шага до «{topic}»?",
+        f"- С чего начать уже сегодня для «{topic}»?",
+    ]
+    return "\n".join(lines)
+
+
+def handle_checklist(bot: SmartAssistant, args: list[str]) -> str:
+    if not args:
+        return "Укажите тему для чек-листа."
+    topic = " ".join(args)
+    lines = [
+        "Чек-лист:",
+        f"- Цель «{topic}» сформулирована ясно?",
+        f"- Есть план и сроки для «{topic}»?",
+        f"- Риски и запасной план для «{topic}» учтены?",
+        f"- Показатели успеха для «{topic}» определены?",
+    ]
+    return "\n".join(lines)
+
+
 def run_cli(storage_path: Path) -> None:
     bot = SmartAssistant(storage_path)
     handlers: dict[str, CommandHandler] = {
@@ -595,6 +671,11 @@ def run_cli(storage_path: Path) -> None:
         "second-order": handle_second_order,
         "tradeoff": handle_tradeoff,
         "signal": handle_signal,
+        "boundary": handle_boundary,
+        "options": handle_options,
+        "priority": handle_priority,
+        "reverse-plan": handle_reverse_plan,
+        "checklist": handle_checklist,
     }
 
     print("Личный умный помощник. Введите help для списка команд.")
