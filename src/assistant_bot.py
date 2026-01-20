@@ -243,6 +243,11 @@ class SmartAssistant:
             "  invert <тема>                  - подумать наоборот\n"
             "  ladder <тема>                  - расширить контекст\n"
             "  randomize <тема>               - случайные триггеры\n"
+            "  scenario <тема> :: <N>         - сценарии событий (до 50)\n"
+            "  premortem <тема>               - заранее найти сбои\n"
+            "  second-order <тема>            - последствия второго порядка\n"
+            "  tradeoff <тема>                - карта компромиссов\n"
+            "  signal <тема>                  - сигналы и триггеры\n"
             "  exit                          - выйти\n"
         )
 
@@ -481,6 +486,82 @@ def handle_randomize(bot: SmartAssistant, args: list[str]) -> str:
     return "\n".join(lines)
 
 
+def handle_scenario(bot: SmartAssistant, args: list[str]) -> str:
+    raw = " ".join(args)
+    if "::" not in raw:
+        return "Формат: scenario <тема> :: <N>"
+    topic, count_raw = [part.strip() for part in raw.split("::", 1)]
+    if not topic or not count_raw.isdigit():
+        return "Укажите тему и число сценариев."
+    count = min(int(count_raw), 50)
+    lines = [
+        "Сценарии событий (шаблоны действий):",
+        f"Тема: {topic}",
+        f"Сгенерировано: {count} (максимум 50 за один запрос).",
+    ]
+    for index in range(1, count + 1):
+        lines.append(
+            f"{index}. Событие: {topic} (вариант {index}) → действие, запасной план, риск."
+        )
+    return "\n".join(lines)
+
+
+def handle_premortem(bot: SmartAssistant, args: list[str]) -> str:
+    if not args:
+        return "Укажите тему для pre-mortem."
+    topic = " ".join(args)
+    lines = [
+        "Pre-mortem:",
+        f"- Представь, что «{topic}» провалилось. Что пошло не так?",
+        f"- Какие 3 наиболее вероятные причины провала в «{topic}»?",
+        f"- Какие слабые места нужно укрепить в «{topic}» заранее?",
+        f"- Что можно сделать сегодня, чтобы снизить риски «{topic}»?",
+    ]
+    return "\n".join(lines)
+
+
+def handle_second_order(bot: SmartAssistant, args: list[str]) -> str:
+    if not args:
+        return "Укажите тему для анализа последствий."
+    topic = " ".join(args)
+    lines = [
+        "Последствия второго порядка:",
+        f"- Что изменится сразу после «{topic}»?",
+        f"- Что изменится через неделю/месяц после «{topic}»?",
+        f"- Какие неожиданные эффекты даст «{topic}»?",
+        f"- Что станет сложнее из-за «{topic}»?",
+    ]
+    return "\n".join(lines)
+
+
+def handle_tradeoff(bot: SmartAssistant, args: list[str]) -> str:
+    if not args:
+        return "Укажите тему для карты компромиссов."
+    topic = " ".join(args)
+    lines = [
+        "Карта компромиссов:",
+        f"- Что выигрываем в «{topic}», а что теряем?",
+        f"- Где баланс скорость/качество для «{topic}»?",
+        f"- Что важнее: цена или эффект в «{topic}»?",
+        f"- Какие 2 метрики в конфликте при «{topic}»?",
+    ]
+    return "\n".join(lines)
+
+
+def handle_signal(bot: SmartAssistant, args: list[str]) -> str:
+    if not args:
+        return "Укажите тему для сигналов."
+    topic = " ".join(args)
+    lines = [
+        "Сигналы и триггеры:",
+        f"- Какие ранние признаки успеха у «{topic}»?",
+        f"- Какие сигналы укажут на риск в «{topic}»?",
+        f"- Какие пороговые значения важны для «{topic}»?",
+        f"- Когда нужно остановиться или пересмотреть «{topic}»?",
+    ]
+    return "\n".join(lines)
+
+
 def run_cli(storage_path: Path) -> None:
     bot = SmartAssistant(storage_path)
     handlers: dict[str, CommandHandler] = {
@@ -509,6 +590,11 @@ def run_cli(storage_path: Path) -> None:
         "invert": handle_invert,
         "ladder": handle_ladder,
         "randomize": handle_randomize,
+        "scenario": handle_scenario,
+        "premortem": handle_premortem,
+        "second-order": handle_second_order,
+        "tradeoff": handle_tradeoff,
+        "signal": handle_signal,
     }
 
     print("Личный умный помощник. Введите help для списка команд.")
