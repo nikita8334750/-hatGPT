@@ -20,7 +20,8 @@ from assistant_bot import AssistantCLI, SmartAssistant
 
 class TelegramAssistant:
     def __init__(self, storage_path: Path) -> None:
-        self.bot = SmartAssistant(storage_path)
+        self.cli = AssistantCLI(storage_path)
+        self.bot = self.cli.bot
 
     def _split_command(self, text: str) -> tuple[str, str]:
         if not text:
@@ -42,21 +43,8 @@ class TelegramAssistant:
         return handler(self, rest)
 
 
-def _reply_from_cli(text: str) -> str:
-    cli = AssistantCLI(Path("assistant_state.json"))
-    command, args = cli.parse_command(text)
-    handler = cli.handlers.get(command)
-    if not handler:
-        return "Неизвестная команда. Введите /help"
-    return handler(args)
-
-
-def _simple_command_response(command: str) -> str:
-    return _reply_from_cli(command)
-
-
 def cmd_help(assistant: TelegramAssistant, rest: str) -> str:
-    return _reply_from_cli("help")
+    return assistant.cli.handle_help([])
 
 
 def cmd_add_task(assistant: TelegramAssistant, rest: str) -> str:
@@ -135,7 +123,7 @@ def cmd_set_due(assistant: TelegramAssistant, rest: str) -> str:
 def cmd_variations(assistant: TelegramAssistant, rest: str) -> str:
     if not rest:
         return "Укажите тему для вариативности."
-    return _reply_from_cli(f"variations {rest}")
+    return assistant.cli.handle_variations([rest])
 
 
 TELEGRAM_COMMANDS: dict[str, Callable[[TelegramAssistant, str], str]] = {
