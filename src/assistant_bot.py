@@ -85,6 +85,20 @@ class SmartAssistant:
         self._save_state()
         return f"Задача добавлена: {title}"
 
+    def remove_task(self, index: int) -> str:
+        if index < 1 or index > len(self.state.tasks):
+            return "Неверный номер задачи."
+        removed = self.state.tasks.pop(index - 1)
+        self._save_state()
+        return f"Задача удалена: {removed.title}"
+
+    def clear_completed_tasks(self) -> str:
+        before = len(self.state.tasks)
+        self.state.tasks = [task for task in self.state.tasks if not task.done]
+        removed = before - len(self.state.tasks)
+        self._save_state()
+        return f"Удалено выполненных задач: {removed}"
+
     def list_tasks(self) -> str:
         if not self.state.tasks:
             return "Список задач пуст."
@@ -106,6 +120,13 @@ class SmartAssistant:
         self.state.notes.append(note)
         self._save_state()
         return f"Заметка сохранена: {title}"
+
+    def remove_note(self, index: int) -> str:
+        if index < 1 or index > len(self.state.notes):
+            return "Неверный номер заметки."
+        removed = self.state.notes.pop(index - 1)
+        self._save_state()
+        return f"Заметка удалена: {removed.title}"
 
     def list_notes(self) -> str:
         if not self.state.notes:
@@ -214,6 +235,75 @@ class SmartAssistant:
         if not answer:
             return "Шаблон не найден."
         return answer
+
+    def search(self, query: str) -> str:
+        query_lower = query.lower()
+        lines = [f"Результаты поиска по запросу: {query}"]
+        matches = 0
+
+        for index, task in enumerate(self.state.tasks, start=1):
+            if query_lower in task.title.lower():
+                lines.append(f"Задача {index}: {task.title}")
+                matches += 1
+
+        for index, note in enumerate(self.state.notes, start=1):
+            haystack = f"{note.title} {note.body}".lower()
+            if query_lower in haystack:
+                lines.append(f"Заметка {index}: {note.title}")
+                matches += 1
+
+        for index, habit in enumerate(self.state.habits, start=1):
+            if query_lower in habit.get("title", "").lower():
+                lines.append(f"Привычка {index}: {habit.get('title')}")
+                matches += 1
+
+        for index, item in enumerate(self.state.shopping, start=1):
+            if query_lower in item.get("title", "").lower():
+                lines.append(f"Покупка {index}: {item.get('title')}")
+                matches += 1
+
+        for index, reminder in enumerate(self.state.reminders, start=1):
+            if query_lower in reminder.get("title", "").lower():
+                lines.append(f"Напоминание {index}: {reminder.get('title')}")
+                matches += 1
+
+        if matches == 0:
+            return "Ничего не найдено."
+        return "\n".join(lines)
+
+    def stats(self) -> str:
+        total_tasks = len(self.state.tasks)
+        done_tasks = sum(1 for task in self.state.tasks if task.done)
+        habits = len(self.state.habits)
+        notes = len(self.state.notes)
+        shopping = len(self.state.shopping)
+        reminders = len(self.state.reminders)
+        templates = len(self.state.quick_answers)
+        lines = [
+            "Сводка:",
+            f"- Задачи: {total_tasks} (выполнено {done_tasks})",
+            f"- Привычки: {habits}",
+            f"- Заметки: {notes}",
+            f"- Покупки: {shopping}",
+            f"- Напоминания: {reminders}",
+            f"- Шаблоны: {templates}",
+        ]
+        return "\n".join(lines)
+
+    def export_state(self, path: Path) -> str:
+        path.write_text(
+            json.dumps(self.state.to_dict(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return f"Экспортировано в {path}"
+
+    def import_state(self, path: Path) -> str:
+        if not path.exists():
+            return "Файл не найден."
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        self.state = AssistantState.from_dict(payload)
+        self._save_state()
+        return f"Импортировано из {path}"
 
 
 class ThinkingToolkit:
@@ -435,8 +525,11 @@ class AssistantCLI:
             "add-task": self.handle_add_task,
             "list-tasks": self.handle_list_tasks,
             "done": self.handle_done,
+            "remove-task": self.handle_remove_task,
+            "clear-done": self.handle_clear_done,
             "add-note": self.handle_add_note,
             "list-notes": self.handle_list_notes,
+            "remove-note": self.handle_remove_note,
             "add-habit": self.handle_add_habit,
             "list-habits": self.handle_list_habits,
             "habit-done": self.handle_habit_done,
@@ -448,6 +541,10 @@ class AssistantCLI:
             "remind-done": self.handle_remind_done,
             "add-template": self.handle_add_template,
             "template": self.handle_template,
+            "search": self.handle_search,
+            "stats": self.handle_stats,
+            "export": self.handle_export,
+            "import": self.handle_import,
             "ideate": self.handle_ideate,
             "reframe": self.handle_reframe,
             "constraints": self.handle_constraints,
@@ -513,6 +610,13 @@ class AssistantCLI:
             "  priority <тема>                - расстановка приоритетов\n"
             "  reverse-plan <тема>            - план от цели назад\n"
             "  checklist <тема>               - проверочный список\n"
+            "  remove-task <номер>            - удалить задачу\n"
+            "  clear-done                     - удалить выполненные задачи\n"
+            "  remove-note <номер>            - удалить заметку\n"
+            "  search <запрос>                - поиск по данным\n"
+            "  stats                          - сводка\n"
+            "  export <путь>                   - экспорт в файл\n"
+            "  import <путь>                   - импорт из файла\n"
             "  exit                          - выйти\n"
         )
 
@@ -532,6 +636,14 @@ class AssistantCLI:
             return "Укажите номер задачи."
         return self.bot.complete_task(int(args[0]))
 
+    def handle_remove_task(self, args: list[str]) -> str:
+        if not args or not args[0].isdigit():
+            return "Укажите номер задачи."
+        return self.bot.remove_task(int(args[0]))
+
+    def handle_clear_done(self, args: list[str]) -> str:
+        return self.bot.clear_completed_tasks()
+
     def handle_add_note(self, args: list[str]) -> str:
         raw = " ".join(args)
         if "::" not in raw:
@@ -543,6 +655,11 @@ class AssistantCLI:
 
     def handle_list_notes(self, args: list[str]) -> str:
         return self.bot.list_notes()
+
+    def handle_remove_note(self, args: list[str]) -> str:
+        if not args or not args[0].isdigit():
+            return "Укажите номер заметки."
+        return self.bot.remove_note(int(args[0]))
 
     def handle_add_habit(self, args: list[str]) -> str:
         raw = " ".join(args)
@@ -604,6 +721,24 @@ class AssistantCLI:
         if not args:
             return "Укажите ключ шаблона."
         return self.bot.get_quick_answer(" ".join(args))
+
+    def handle_search(self, args: list[str]) -> str:
+        if not args:
+            return "Укажите запрос для поиска."
+        return self.bot.search(" ".join(args))
+
+    def handle_stats(self, args: list[str]) -> str:
+        return self.bot.stats()
+
+    def handle_export(self, args: list[str]) -> str:
+        if not args:
+            return "Укажите путь для экспорта."
+        return self.bot.export_state(Path(" ".join(args)))
+
+    def handle_import(self, args: list[str]) -> str:
+        if not args:
+            return "Укажите путь для импорта."
+        return self.bot.import_state(Path(" ".join(args)))
 
     def handle_ideate(self, args: list[str]) -> str:
         if not args:
