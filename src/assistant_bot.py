@@ -635,6 +635,15 @@ class AssistantCLI:
             return "", []
         return parts[0], parts[1:]
 
+    @staticmethod
+    def _parse_split_args(raw: str) -> tuple[str, str] | None:
+        if "::" not in raw:
+            return None
+        left, right = [part.strip() for part in raw.split("::", 1)]
+        if not left or not right:
+            return None
+        return left, right
+
     def help_text(self) -> str:
         return (
             "Доступные команды:\n"
@@ -712,11 +721,10 @@ class AssistantCLI:
 
     def handle_add_note(self, args: list[str]) -> str:
         raw = " ".join(args)
-        if "::" not in raw:
+        parsed = self._parse_split_args(raw)
+        if not parsed:
             return "Формат: add-note <заголовок> :: <тело>"
-        title, body = [part.strip() for part in raw.split("::", 1)]
-        if not title or not body:
-            return "Заполните и заголовок, и тело заметки."
+        title, body = parsed
         return self.bot.add_note(title, body)
 
     def handle_list_notes(self, args: list[str]) -> str:
@@ -729,11 +737,10 @@ class AssistantCLI:
 
     def handle_add_habit(self, args: list[str]) -> str:
         raw = " ".join(args)
-        if "::" not in raw:
+        parsed = self._parse_split_args(raw)
+        if not parsed:
             return "Формат: add-habit <название> :: <частота>"
-        title, frequency = [part.strip() for part in raw.split("::", 1)]
-        if not title or not frequency:
-            return "Заполните и название, и частоту."
+        title, frequency = parsed
         return self.bot.add_habit(title, frequency)
 
     def handle_list_habits(self, args: list[str]) -> str:
@@ -759,10 +766,11 @@ class AssistantCLI:
 
     def handle_remind(self, args: list[str]) -> str:
         raw = " ".join(args)
-        if "::" not in raw:
+        parsed = self._parse_split_args(raw)
+        if not parsed:
             return "Формат: remind <текст> :: <минуты>"
-        title, minutes_raw = [part.strip() for part in raw.split("::", 1)]
-        if not title or not minutes_raw.isdigit():
+        title, minutes_raw = parsed
+        if not minutes_raw.isdigit():
             return "Укажите текст и количество минут."
         return self.bot.add_reminder(title, int(minutes_raw))
 
@@ -776,11 +784,10 @@ class AssistantCLI:
 
     def handle_add_template(self, args: list[str]) -> str:
         raw = " ".join(args)
-        if "::" not in raw:
+        parsed = self._parse_split_args(raw)
+        if not parsed:
             return "Формат: add-template <ключ> :: <текст>"
-        key, value = [part.strip() for part in raw.split("::", 1)]
-        if not key or not value:
-            return "Укажите ключ и текст шаблона."
+        key, value = parsed
         return self.bot.add_quick_answer(key, value)
 
     def handle_template(self, args: list[str]) -> str:
@@ -808,18 +815,20 @@ class AssistantCLI:
 
     def handle_set_priority(self, args: list[str]) -> str:
         raw = " ".join(args)
-        if "::" not in raw:
+        parsed = self._parse_split_args(raw)
+        if not parsed:
             return "Формат: set-priority <номер> :: <уровень>"
-        index_raw, priority = [part.strip() for part in raw.split("::", 1)]
+        index_raw, priority = parsed
         if not index_raw.isdigit():
             return "Укажите номер задачи."
         return self.bot.set_task_priority(int(index_raw), priority)
 
     def handle_set_due(self, args: list[str]) -> str:
         raw = " ".join(args)
-        if "::" not in raw:
+        parsed = self._parse_split_args(raw)
+        if not parsed:
             return "Формат: set-due <номер> :: <YYYY-MM-DD>"
-        index_raw, due_date = [part.strip() for part in raw.split("::", 1)]
+        index_raw, due_date = parsed
         if not index_raw.isdigit():
             return "Укажите номер задачи."
         return self.bot.set_task_due_date(int(index_raw), due_date)
@@ -849,11 +858,10 @@ class AssistantCLI:
 
     def handle_combine(self, args: list[str]) -> str:
         raw = " ".join(args)
-        if "::" not in raw:
+        parsed = self._parse_split_args(raw)
+        if not parsed:
             return "Формат: combine <тема> :: <область>"
-        topic, domain = [part.strip() for part in raw.split("::", 1)]
-        if not topic or not domain:
-            return "Укажите тему и область для объединения."
+        topic, domain = parsed
         return ThinkingToolkit.combine(topic, domain)
 
     def handle_invert(self, args: list[str]) -> str:
@@ -873,10 +881,11 @@ class AssistantCLI:
 
     def handle_scenario(self, args: list[str]) -> str:
         raw = " ".join(args)
-        if "::" not in raw:
+        parsed = self._parse_split_args(raw)
+        if not parsed:
             return "Формат: scenario <тема> :: <N>"
-        topic, count_raw = [part.strip() for part in raw.split("::", 1)]
-        if not topic or not count_raw.isdigit():
+        topic, count_raw = parsed
+        if not count_raw.isdigit():
             return "Укажите тему и число сценариев."
         return ThinkingToolkit.scenario(topic, int(count_raw))
 
