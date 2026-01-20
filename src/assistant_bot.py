@@ -368,6 +368,23 @@ class SmartAssistant:
 
 class ThinkingToolkit:
     @staticmethod
+    def variations(topic: str) -> str:
+        sections = [
+            ("Идеи", ThinkingToolkit.ideate(topic)),
+            ("Ограничения", ThinkingToolkit.constraints(topic)),
+            ("Смена точки зрения", ThinkingToolkit.perspective(topic)),
+            ("Обратное мышление", ThinkingToolkit.invert(topic)),
+            ("Лестница контекста", ThinkingToolkit.ladder(topic)),
+            ("Случайные триггеры", ThinkingToolkit.randomize(topic)),
+            ("Последствия", ThinkingToolkit.second_order(topic)),
+            ("Компромиссы", ThinkingToolkit.tradeoff(topic)),
+        ]
+        lines = ["Панорама вариантов:"]
+        for title, block in sections:
+            lines.append(f"\n{title}:")
+            lines.append(block)
+        return "\n".join(lines)
+    @staticmethod
     def ideate(topic: str) -> str:
         prompts = [
             f"Какая самая простая версия решения для «{topic}»?",
@@ -626,6 +643,7 @@ class AssistantCLI:
             "priority": self.handle_priority,
             "reverse-plan": self.handle_reverse_plan,
             "checklist": self.handle_checklist,
+            "variations": self.handle_variations,
         }
 
     @staticmethod
@@ -692,6 +710,7 @@ class AssistantCLI:
             "  set-priority <номер> :: <уровень> - приоритет задачи\n"
             "  set-due <номер> :: <YYYY-MM-DD>   - срок задачи\n"
             "  agenda                         - задачи по срокам\n"
+            "  variations <тема>              - панорама вариантов\n"
             "  exit                          - выйти\n"
         )
 
@@ -933,6 +952,11 @@ class AssistantCLI:
         if not args:
             return "Укажите тему для чек-листа."
         return ThinkingToolkit.checklist(" ".join(args))
+
+    def handle_variations(self, args: list[str]) -> str:
+        if not args:
+            return "Укажите тему для вариативности."
+        return ThinkingToolkit.variations(" ".join(args))
 
     def run(self) -> None:
         print("Личный умный помощник. Введите help для списка команд.")
