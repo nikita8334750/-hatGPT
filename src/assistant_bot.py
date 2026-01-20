@@ -81,6 +81,9 @@ class SmartAssistant:
     def _now(self) -> str:
         return datetime.now().strftime(DATE_FMT)
 
+    def _today(self) -> str:
+        return datetime.now().strftime("%Y-%m-%d")
+
     def add_task(self, title: str) -> str:
         task = Task(title=title, created_at=self._now())
         self.state.tasks.append(task)
@@ -307,10 +310,11 @@ class SmartAssistant:
         shopping = len(self.state.shopping)
         reminders = len(self.state.reminders)
         templates = len(self.state.quick_answers)
+        today = self._today()
         overdue = sum(
             1
             for task in self.state.tasks
-            if task.due_date and not task.done and task.due_date < datetime.now().strftime("%Y-%m-%d")
+            if task.due_date and not task.done and task.due_date < today
         )
         lines = [
             "Сводка:",
@@ -325,7 +329,7 @@ class SmartAssistant:
         return "\n".join(lines)
 
     def agenda(self) -> str:
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = self._today()
         overdue = []
         upcoming = []
         for index, task in enumerate(self.state.tasks, start=1):
