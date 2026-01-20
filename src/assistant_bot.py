@@ -17,6 +17,8 @@ class Task:
     title: str
     created_at: str
     done: bool = False
+    priority: str = "средний"
+    due_date: str | None = None
 
 
 @dataclass
@@ -85,6 +87,28 @@ class SmartAssistant:
         self._save_state()
         return f"Задача добавлена: {title}"
 
+    def set_task_priority(self, index: int, priority: str) -> str:
+        if index < 1 or index > len(self.state.tasks):
+            return "Неверный номер задачи."
+        normalized = priority.strip().lower()
+        allowed = {"низкий", "средний", "высокий"}
+        if normalized not in allowed:
+            return "Приоритет должен быть: низкий, средний или высокий."
+        self.state.tasks[index - 1].priority = normalized
+        self._save_state()
+        return "Приоритет обновлён."
+
+    def set_task_due_date(self, index: int, due_date: str) -> str:
+        if index < 1 or index > len(self.state.tasks):
+            return "Неверный номер задачи."
+        try:
+            datetime.strptime(due_date, "%Y-%m-%d")
+        except ValueError:
+            return "Формат даты: YYYY-MM-DD."
+        self.state.tasks[index - 1].due_date = due_date
+        self._save_state()
+        return "Срок задачи обновлён."
+
     def remove_task(self, index: int) -> str:
         if index < 1 or index > len(self.state.tasks):
             return "Неверный номер задачи."
@@ -105,7 +129,11 @@ class SmartAssistant:
         lines = ["Задачи:"]
         for index, task in enumerate(self.state.tasks, start=1):
             status = "✅" if task.done else "🟡"
-            lines.append(f"{index}. {status} {task.title} (создано {task.created_at})")
+            due = f", срок {task.due_date}" if task.due_date else ""
+            lines.append(
+                f"{index}. {status} {task.title} "
+                f"(создано {task.created_at}, приоритет {task.priority}{due})"
+            )
         return "\n".join(lines)
 
     def complete_task(self, index: int) -> str:
@@ -279,15 +307,43 @@ class SmartAssistant:
         shopping = len(self.state.shopping)
         reminders = len(self.state.reminders)
         templates = len(self.state.quick_answers)
+        overdue = sum(
+            1
+            for task in self.state.tasks
+            if task.due_date and not task.done and task.due_date < datetime.now().strftime("%Y-%m-%d")
+        )
         lines = [
             "Сводка:",
             f"- Задачи: {total_tasks} (выполнено {done_tasks})",
+            f"- Просрочено: {overdue}",
             f"- Привычки: {habits}",
             f"- Заметки: {notes}",
             f"- Покупки: {shopping}",
             f"- Напоминания: {reminders}",
             f"- Шаблоны: {templates}",
         ]
+        return "\n".join(lines)
+
+    def agenda(self) -> str:
+        today = datetime.now().strftime("%Y-%m-%d")
+        overdue = []
+        upcoming = []
+        for index, task in enumerate(self.state.tasks, start=1):
+            if task.done or not task.due_date:
+                continue
+            if task.due_date < today:
+                overdue.append(f"{index}. {task.title} (срок {task.due_date})")
+            elif task.due_date == today:
+                upcoming.append(f"{index}. {task.title} (сегодня)")
+        if not overdue and not upcoming:
+            return "Срочных задач нет."
+        lines = ["Актуальные задачи:"]
+        if overdue:
+            lines.append("Просроченные:")
+            lines.extend(f"- {item}" for item in overdue)
+        if upcoming:
+            lines.append("На сегодня:")
+            lines.extend(f"- {item}" for item in upcoming)
         return "\n".join(lines)
 
     def export_state(self, path: Path) -> str:
@@ -545,6 +601,9 @@ class AssistantCLI:
             "stats": self.handle_stats,
             "export": self.handle_export,
             "import": self.handle_import,
+            "set-priority": self.handle_set_priority,
+            "set-due": self.handle_set_due,
+            "agenda": self.handle_agenda,
             "ideate": self.handle_ideate,
             "reframe": self.handle_reframe,
             "constraints": self.handle_constraints,
@@ -617,6 +676,9 @@ class AssistantCLI:
             "  stats                          - сводка\n"
             "  export <путь>                   - экспорт в файл\n"
             "  import <путь>                   - импорт из файла\n"
+            "  set-priority <номер> :: <уровень> - приоритет задачи\n"
+            "  set-due <номер> :: <YYYY-MM-DD>   - срок задачи\n"
+            "  agenda                         - задачи по срокам\n"
             "  exit                          - выйти\n"
         )
 
@@ -739,6 +801,27 @@ class AssistantCLI:
         if not args:
             return "Укажите путь для импорта."
         return self.bot.import_state(Path(" ".join(args)))
+
+    def handle_set_priority(self, args: list[str]) -> str:
+        raw = " ".join(args)
+        if "::" not in raw:
+            return "Формат: set-priority <номер> :: <уровень>"
+        index_raw, priority = [part.strip() for part in raw.split("::", 1)]
+        if not index_raw.isdigit():
+            return "Укажите номер задачи."
+        return self.bot.set_task_priority(int(index_raw), priority)
+
+    def handle_set_due(self, args: list[str]) -> str:
+        raw = " ".join(args)
+        if "::" not in raw:
+            return "Формат: set-due <номер> :: <YYYY-MM-DD>"
+        index_raw, due_date = [part.strip() for part in raw.split("::", 1)]
+        if not index_raw.isdigit():
+            return "Укажите номер задачи."
+        return self.bot.set_task_due_date(int(index_raw), due_date)
+
+    def handle_agenda(self, args: list[str]) -> str:
+        return self.bot.agenda()
 
     def handle_ideate(self, args: list[str]) -> str:
         if not args:
