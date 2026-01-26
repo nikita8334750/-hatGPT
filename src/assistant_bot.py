@@ -296,11 +296,10 @@ class SmartAssistant:
         )
 
     def set_response_settings(self, tone: str, detail: str, format_style: str) -> str:
-        self.state.response_settings = {
-            "tone": tone,
-            "detail": detail,
-            "format": format_style,
-        }
+        normalized = self.normalize_response_settings(tone, detail, format_style)
+        if normalized is None:
+            return "Допустимо: тон=нейтральный/деловой/дружелюбный, детальность=кратко/средне/подробно, формат=список/абзац."
+        self.state.response_settings = normalized
         self._save_state()
         return "Параметры ответов обновлены."
 
@@ -311,6 +310,32 @@ class SmartAssistant:
             "format": "список",
         }
         return {**defaults, **self.state.response_settings}
+
+    def normalize_response_settings(
+        self, tone: str, detail: str, format_style: str
+    ) -> dict[str, str] | None:
+        tone_map = {
+            "нейтр": "нейтральный",
+            "нейтральный": "нейтральный",
+            "деловой": "деловой",
+            "дружелюбный": "дружелюбный",
+        }
+        detail_map = {
+            "кратко": "кратко",
+            "средне": "средне",
+            "подробно": "подробно",
+            "детально": "подробно",
+        }
+        format_map = {
+            "список": "список",
+            "абзац": "абзац",
+        }
+        tone_norm = tone_map.get(tone.strip().lower())
+        detail_norm = detail_map.get(detail.strip().lower())
+        format_norm = format_map.get(format_style.strip().lower())
+        if not tone_norm or not detail_norm or not format_norm:
+            return None
+        return {"tone": tone_norm, "detail": detail_norm, "format": format_norm}
 
     def search(self, query: str) -> str:
         query_lower = query.lower()
