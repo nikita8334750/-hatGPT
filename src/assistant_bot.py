@@ -37,6 +37,7 @@ class AssistantState:
     reminders: list[dict] = field(default_factory=list)
     quick_answers: dict[str, str] = field(default_factory=dict)
     profile: dict[str, str] = field(default_factory=dict)
+    response_settings: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -47,6 +48,7 @@ class AssistantState:
             "reminders": self.reminders,
             "quick_answers": self.quick_answers,
             "profile": self.profile,
+            "response_settings": self.response_settings,
         }
 
     @classmethod
@@ -61,6 +63,7 @@ class AssistantState:
             reminders=payload.get("reminders", []),
             quick_answers=payload.get("quick_answers", {}),
             profile=payload.get("profile", {}),
+            response_settings=payload.get("response_settings", {}),
         )
 
 
@@ -291,6 +294,23 @@ class SmartAssistant:
             f"- Цель: {goal}\n"
             f"- Ограничения: {constraints}"
         )
+
+    def set_response_settings(self, tone: str, detail: str, format_style: str) -> str:
+        self.state.response_settings = {
+            "tone": tone,
+            "detail": detail,
+            "format": format_style,
+        }
+        self._save_state()
+        return "Параметры ответов обновлены."
+
+    def get_response_settings(self) -> dict[str, str]:
+        defaults = {
+            "tone": "нейтральный",
+            "detail": "средне",
+            "format": "список",
+        }
+        return {**defaults, **self.state.response_settings}
 
     def search(self, query: str) -> str:
         query_lower = query.lower()
@@ -621,6 +641,32 @@ class ThinkingToolkit:
 
 class StrategicToolkit:
     @staticmethod
+    def _apply_settings(lines: list[str], settings: dict[str, str]) -> str:
+        tone = settings.get("tone", "нейтральный")
+        detail = settings.get("detail", "средне")
+        format_style = settings.get("format", "список")
+
+        if detail == "кратко":
+            trimmed = [lines[0]]
+            for line in lines[1:]:
+                if line.startswith("-") or line.endswith(":"):
+                    trimmed.append(line)
+                if len(trimmed) >= 8:
+                    break
+            lines = trimmed
+
+        if tone == "деловой":
+            lines.insert(1, "Тон: деловой.")
+        elif tone == "дружелюбный":
+            lines.insert(1, "Тон: дружелюбный.")
+
+        if format_style == "абзац":
+            text = " ".join(line.lstrip("- ").strip() for line in lines)
+            return text
+
+        return "\n".join(lines)
+
+    @staticmethod
     def _profile_header(profile: dict[str, str]) -> str:
         if not profile:
             return "Профиль не задан — использую общие допущения."
@@ -630,7 +676,7 @@ class StrategicToolkit:
         return f"Профиль: роль={role} | цель={goal} | ограничения={constraints}"
 
     @staticmethod
-    def analyze(context: str, profile: dict[str, str]) -> str:
+    def analyze(context: str, profile: dict[str, str], settings: dict[str, str]) -> str:
         lines = [
             "Анализ (программист-бизнесмен):",
             StrategicToolkit._profile_header(profile),
@@ -652,10 +698,10 @@ class StrategicToolkit:
             "- Сформулировать гипотезы и проверить их.",
             "- Зафиксировать границы бюджета/сроков.",
         ]
-        return "\n".join(lines)
+        return StrategicToolkit._apply_settings(lines, settings)
 
     @staticmethod
-    def plan(context: str, profile: dict[str, str]) -> str:
+    def plan(context: str, profile: dict[str, str], settings: dict[str, str]) -> str:
         lines = [
             "План действий:",
             StrategicToolkit._profile_header(profile),
@@ -670,10 +716,10 @@ class StrategicToolkit:
             "Фаза 4 — Запуск и измерение:",
             "- Метрики, обратная связь, итерации.",
         ]
-        return "\n".join(lines)
+        return StrategicToolkit._apply_settings(lines, settings)
 
     @staticmethod
-    def pitch(context: str, profile: dict[str, str]) -> str:
+    def pitch(context: str, profile: dict[str, str], settings: dict[str, str]) -> str:
         lines = [
             "Питч:",
             StrategicToolkit._profile_header(profile),
@@ -682,10 +728,10 @@ class StrategicToolkit:
             "Монетизация/эффект: измеримые метрики эффективности.",
             "Стратегия: MVP → проверка спроса → масштабирование.",
         ]
-        return "\n".join(lines)
+        return StrategicToolkit._apply_settings(lines, settings)
 
     @staticmethod
-    def estimate(context: str) -> str:
+    def estimate(context: str, settings: dict[str, str]) -> str:
         lines = [
             "Оценка (приблизительно):",
             f"Контекст: {context}",
@@ -693,10 +739,10 @@ class StrategicToolkit:
             "- Сроки: короткий цикл для MVP, затем итерации.",
             "- Риски: объём данных, интеграции, UX.",
         ]
-        return "\n".join(lines)
+        return StrategicToolkit._apply_settings(lines, settings)
 
     @staticmethod
-    def tech(context: str) -> str:
+    def tech(context: str, settings: dict[str, str]) -> str:
         lines = [
             "Технический разбор:",
             f"Задача: {context}",
@@ -709,7 +755,7 @@ class StrategicToolkit:
             "Тестирование:",
             "- Unit, интеграционные, e2e.",
         ]
-        return "\n".join(lines)
+        return StrategicToolkit._apply_settings(lines, settings)
 
 
 class AssistantCLI:
@@ -769,6 +815,8 @@ class AssistantCLI:
             "tech": self.handle_tech,
             "set-profile": self.handle_set_profile,
             "profile": self.handle_profile,
+            "set-response": self.handle_set_response,
+            "response": self.handle_response,
         }
 
     @staticmethod
@@ -850,6 +898,8 @@ class AssistantCLI:
             "  tech <контекст>                - технический разбор\n"
             "  set-profile <роль> :: <цель> :: <ограничения> - профиль\n"
             "  profile                        - показать профиль\n"
+            "  set-response <тон> :: <детальность> :: <формат> - ответы\n"
+            "  response                       - показать параметры\n"
             "  exit                          - выйти\n"
         )
 
@@ -1100,27 +1150,35 @@ class AssistantCLI:
     def handle_analyze(self, args: list[str]) -> str:
         if not args:
             return "Укажите контекст для анализа."
-        return StrategicToolkit.analyze(" ".join(args), self.bot.state.profile)
+        return StrategicToolkit.analyze(
+            " ".join(args), self.bot.state.profile, self.bot.get_response_settings()
+        )
 
     def handle_plan(self, args: list[str]) -> str:
         if not args:
             return "Укажите контекст для плана."
-        return StrategicToolkit.plan(" ".join(args), self.bot.state.profile)
+        return StrategicToolkit.plan(
+            " ".join(args), self.bot.state.profile, self.bot.get_response_settings()
+        )
 
     def handle_pitch(self, args: list[str]) -> str:
         if not args:
             return "Укажите контекст для питча."
-        return StrategicToolkit.pitch(" ".join(args), self.bot.state.profile)
+        return StrategicToolkit.pitch(
+            " ".join(args), self.bot.state.profile, self.bot.get_response_settings()
+        )
 
     def handle_estimate(self, args: list[str]) -> str:
         if not args:
             return "Укажите контекст для оценки."
-        return StrategicToolkit.estimate(" ".join(args))
+        return StrategicToolkit.estimate(
+            " ".join(args), self.bot.get_response_settings()
+        )
 
     def handle_tech(self, args: list[str]) -> str:
         if not args:
             return "Укажите контекст для технического разбора."
-        return StrategicToolkit.tech(" ".join(args))
+        return StrategicToolkit.tech(" ".join(args), self.bot.get_response_settings())
 
     def handle_set_profile(self, args: list[str]) -> str:
         raw = " ".join(args)
@@ -1132,6 +1190,23 @@ class AssistantCLI:
 
     def handle_profile(self, args: list[str]) -> str:
         return self.bot.get_profile()
+
+    def handle_set_response(self, args: list[str]) -> str:
+        raw = " ".join(args)
+        parts = self._parse_split_parts(raw, 3)
+        if not parts:
+            return "Формат: set-response <тон> :: <детальность> :: <формат>"
+        tone, detail, format_style = parts
+        return self.bot.set_response_settings(tone, detail, format_style)
+
+    def handle_response(self, args: list[str]) -> str:
+        settings = self.bot.get_response_settings()
+        return (
+            "Параметры ответов:\n"
+            f"- Тон: {settings['tone']}\n"
+            f"- Детальность: {settings['detail']}\n"
+            f"- Формат: {settings['format']}"
+        )
 
     def run(self) -> None:
         print("Личный умный помощник. Введите help для списка команд.")

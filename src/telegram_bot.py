@@ -169,6 +169,25 @@ def cmd_profile(assistant: TelegramAssistant, rest: str) -> str:
     return assistant.bot.get_profile()
 
 
+def cmd_set_response(assistant: TelegramAssistant, rest: str) -> str:
+    if "::" not in rest:
+        return "Формат: /set_response <тон> :: <детальность> :: <формат>"
+    parts = [part.strip() for part in rest.split("::")]
+    if len(parts) != 3 or any(not part for part in parts):
+        return "Формат: /set_response <тон> :: <детальность> :: <формат>"
+    return assistant.bot.set_response_settings(parts[0], parts[1], parts[2])
+
+
+def cmd_response(assistant: TelegramAssistant, rest: str) -> str:
+    settings = assistant.bot.get_response_settings()
+    return (
+        "Параметры ответов:\n"
+        f"- Тон: {settings['tone']}\n"
+        f"- Детальность: {settings['detail']}\n"
+        f"- Формат: {settings['format']}"
+    )
+
+
 TELEGRAM_COMMANDS: dict[str, Callable[[TelegramAssistant, str], str]] = {
     "help": cmd_help,
     "add_task": cmd_add_task,
@@ -192,6 +211,8 @@ TELEGRAM_COMMANDS: dict[str, Callable[[TelegramAssistant, str], str]] = {
     "tech": cmd_tech,
     "set_profile": cmd_set_profile,
     "profile": cmd_profile,
+    "set_response": cmd_set_response,
+    "response": cmd_response,
 }
 
 
