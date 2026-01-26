@@ -36,6 +36,7 @@ class AssistantState:
     shopping: list[dict] = field(default_factory=list)
     reminders: list[dict] = field(default_factory=list)
     quick_answers: dict[str, str] = field(default_factory=dict)
+    profile: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -45,6 +46,7 @@ class AssistantState:
             "shopping": self.shopping,
             "reminders": self.reminders,
             "quick_answers": self.quick_answers,
+            "profile": self.profile,
         }
 
     @classmethod
@@ -58,6 +60,7 @@ class AssistantState:
             shopping=payload.get("shopping", []),
             reminders=payload.get("reminders", []),
             quick_answers=payload.get("quick_answers", {}),
+            profile=payload.get("profile", {}),
         )
 
 
@@ -266,6 +269,28 @@ class SmartAssistant:
         if not answer:
             return "Шаблон не найден."
         return answer
+
+    def set_profile(self, role: str, goal: str, constraints: str) -> str:
+        self.state.profile = {
+            "role": role,
+            "goal": goal,
+            "constraints": constraints,
+        }
+        self._save_state()
+        return "Профиль обновлён."
+
+    def get_profile(self) -> str:
+        if not self.state.profile:
+            return "Профиль не задан."
+        role = self.state.profile.get("role", "не указан")
+        goal = self.state.profile.get("goal", "не указана")
+        constraints = self.state.profile.get("constraints", "не указаны")
+        return (
+            "Профиль:\n"
+            f"- Роль: {role}\n"
+            f"- Цель: {goal}\n"
+            f"- Ограничения: {constraints}"
+        )
 
     def search(self, query: str) -> str:
         query_lower = query.lower()
@@ -594,6 +619,99 @@ class ThinkingToolkit:
         return "\n".join(lines)
 
 
+class StrategicToolkit:
+    @staticmethod
+    def _profile_header(profile: dict[str, str]) -> str:
+        if not profile:
+            return "Профиль не задан — использую общие допущения."
+        role = profile.get("role", "не указан")
+        goal = profile.get("goal", "не указана")
+        constraints = profile.get("constraints", "не указаны")
+        return f"Профиль: роль={role} | цель={goal} | ограничения={constraints}"
+
+    @staticmethod
+    def analyze(context: str, profile: dict[str, str]) -> str:
+        lines = [
+            "Анализ (программист-бизнесмен):",
+            StrategicToolkit._profile_header(profile),
+            "Цель:",
+            f"- {context}",
+            "Ключевые допущения:",
+            "- Ценность должна быть измеримой (метрики).",
+            "- Решение должно быть технически реализуемым и окупаемым.",
+            "Опции:",
+            "- Быстрый MVP с ключевой функцией.",
+            "- Полноценный релиз с интеграциями.",
+            "Риски:",
+            "- Низкий спрос.",
+            "- Технический долг.",
+            "Метрики успеха:",
+            "- Пользовательская активация.",
+            "- Конверсия в оплату/эффект.",
+            "Следующие шаги:",
+            "- Сформулировать гипотезы и проверить их.",
+            "- Зафиксировать границы бюджета/сроков.",
+        ]
+        return "\n".join(lines)
+
+    @staticmethod
+    def plan(context: str, profile: dict[str, str]) -> str:
+        lines = [
+            "План действий:",
+            StrategicToolkit._profile_header(profile),
+            "Фаза 1 — Исследование:",
+            f"- Уточнить цель: {context}",
+            "- Собрать требования и ограничения.",
+            "Фаза 2 — Проектирование:",
+            "- Архитектура и ключевые компоненты.",
+            "- Выбор технологий.",
+            "Фаза 3 — Реализация:",
+            "- MVP, затем улучшения.",
+            "Фаза 4 — Запуск и измерение:",
+            "- Метрики, обратная связь, итерации.",
+        ]
+        return "\n".join(lines)
+
+    @staticmethod
+    def pitch(context: str, profile: dict[str, str]) -> str:
+        lines = [
+            "Питч:",
+            StrategicToolkit._profile_header(profile),
+            f"Мы решаем проблему: {context}.",
+            "Ценность: быстрее, дешевле, понятнее для пользователя.",
+            "Монетизация/эффект: измеримые метрики эффективности.",
+            "Стратегия: MVP → проверка спроса → масштабирование.",
+        ]
+        return "\n".join(lines)
+
+    @staticmethod
+    def estimate(context: str) -> str:
+        lines = [
+            "Оценка (приблизительно):",
+            f"Контекст: {context}",
+            "- Объём работ: зависит от требований и интеграций.",
+            "- Сроки: короткий цикл для MVP, затем итерации.",
+            "- Риски: объём данных, интеграции, UX.",
+        ]
+        return "\n".join(lines)
+
+    @staticmethod
+    def tech(context: str) -> str:
+        lines = [
+            "Технический разбор:",
+            f"Задача: {context}",
+            "Архитектура:",
+            "- Слои: API, бизнес-логика, хранилище.",
+            "Данные:",
+            "- Сущности, связи, ограничения.",
+            "Интеграции:",
+            "- Внешние сервисы и API.",
+            "Тестирование:",
+            "- Unit, интеграционные, e2e.",
+        ]
+        return "\n".join(lines)
+
+
 class AssistantCLI:
     def __init__(self, storage_path: Path) -> None:
         self.bot = SmartAssistant(storage_path)
@@ -644,6 +762,13 @@ class AssistantCLI:
             "reverse-plan": self.handle_reverse_plan,
             "checklist": self.handle_checklist,
             "variations": self.handle_variations,
+            "analyze": self.handle_analyze,
+            "plan": self.handle_plan,
+            "pitch": self.handle_pitch,
+            "estimate": self.handle_estimate,
+            "tech": self.handle_tech,
+            "set-profile": self.handle_set_profile,
+            "profile": self.handle_profile,
         }
 
     @staticmethod
@@ -661,6 +786,13 @@ class AssistantCLI:
         if not left or not right:
             return None
         return left, right
+
+    @staticmethod
+    def _parse_split_parts(raw: str, expected: int) -> list[str] | None:
+        parts = [part.strip() for part in raw.split("::")]
+        if len(parts) != expected or any(not part for part in parts):
+            return None
+        return parts
 
     def help_text(self) -> str:
         return (
@@ -711,6 +843,13 @@ class AssistantCLI:
             "  set-due <номер> :: <YYYY-MM-DD>   - срок задачи\n"
             "  agenda                         - задачи по срокам\n"
             "  variations <тема>              - панорама вариантов\n"
+            "  analyze <контекст>             - анализ решения\n"
+            "  plan <контекст>                - план реализации\n"
+            "  pitch <контекст>               - краткий питч\n"
+            "  estimate <контекст>            - оценка работ\n"
+            "  tech <контекст>                - технический разбор\n"
+            "  set-profile <роль> :: <цель> :: <ограничения> - профиль\n"
+            "  profile                        - показать профиль\n"
             "  exit                          - выйти\n"
         )
 
@@ -957,6 +1096,42 @@ class AssistantCLI:
         if not args:
             return "Укажите тему для вариативности."
         return ThinkingToolkit.variations(" ".join(args))
+
+    def handle_analyze(self, args: list[str]) -> str:
+        if not args:
+            return "Укажите контекст для анализа."
+        return StrategicToolkit.analyze(" ".join(args), self.bot.state.profile)
+
+    def handle_plan(self, args: list[str]) -> str:
+        if not args:
+            return "Укажите контекст для плана."
+        return StrategicToolkit.plan(" ".join(args), self.bot.state.profile)
+
+    def handle_pitch(self, args: list[str]) -> str:
+        if not args:
+            return "Укажите контекст для питча."
+        return StrategicToolkit.pitch(" ".join(args), self.bot.state.profile)
+
+    def handle_estimate(self, args: list[str]) -> str:
+        if not args:
+            return "Укажите контекст для оценки."
+        return StrategicToolkit.estimate(" ".join(args))
+
+    def handle_tech(self, args: list[str]) -> str:
+        if not args:
+            return "Укажите контекст для технического разбора."
+        return StrategicToolkit.tech(" ".join(args))
+
+    def handle_set_profile(self, args: list[str]) -> str:
+        raw = " ".join(args)
+        parts = self._parse_split_parts(raw, 3)
+        if not parts:
+            return "Формат: set-profile <роль> :: <цель> :: <ограничения>"
+        role, goal, constraints = parts
+        return self.bot.set_profile(role, goal, constraints)
+
+    def handle_profile(self, args: list[str]) -> str:
+        return self.bot.get_profile()
 
     def run(self) -> None:
         print("Личный умный помощник. Введите help для списка команд.")

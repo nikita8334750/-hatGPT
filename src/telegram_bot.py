@@ -126,6 +126,49 @@ def cmd_variations(assistant: TelegramAssistant, rest: str) -> str:
     return assistant.cli.handle_variations([rest])
 
 
+def cmd_analyze(assistant: TelegramAssistant, rest: str) -> str:
+    if not rest:
+        return "Укажите контекст для анализа."
+    return assistant.cli.handle_analyze([rest])
+
+
+def cmd_plan(assistant: TelegramAssistant, rest: str) -> str:
+    if not rest:
+        return "Укажите контекст для плана."
+    return assistant.cli.handle_plan([rest])
+
+
+def cmd_pitch(assistant: TelegramAssistant, rest: str) -> str:
+    if not rest:
+        return "Укажите контекст для питча."
+    return assistant.cli.handle_pitch([rest])
+
+
+def cmd_estimate(assistant: TelegramAssistant, rest: str) -> str:
+    if not rest:
+        return "Укажите контекст для оценки."
+    return assistant.cli.handle_estimate([rest])
+
+
+def cmd_tech(assistant: TelegramAssistant, rest: str) -> str:
+    if not rest:
+        return "Укажите контекст для технического разбора."
+    return assistant.cli.handle_tech([rest])
+
+
+def cmd_set_profile(assistant: TelegramAssistant, rest: str) -> str:
+    if "::" not in rest:
+        return "Формат: /set_profile <роль> :: <цель> :: <ограничения>"
+    parts = [part.strip() for part in rest.split("::")]
+    if len(parts) != 3 or any(not part for part in parts):
+        return "Формат: /set_profile <роль> :: <цель> :: <ограничения>"
+    return assistant.bot.set_profile(parts[0], parts[1], parts[2])
+
+
+def cmd_profile(assistant: TelegramAssistant, rest: str) -> str:
+    return assistant.bot.get_profile()
+
+
 TELEGRAM_COMMANDS: dict[str, Callable[[TelegramAssistant, str], str]] = {
     "help": cmd_help,
     "add_task": cmd_add_task,
@@ -142,6 +185,13 @@ TELEGRAM_COMMANDS: dict[str, Callable[[TelegramAssistant, str], str]] = {
     "set_priority": cmd_set_priority,
     "set_due": cmd_set_due,
     "variations": cmd_variations,
+    "analyze": cmd_analyze,
+    "plan": cmd_plan,
+    "pitch": cmd_pitch,
+    "estimate": cmd_estimate,
+    "tech": cmd_tech,
+    "set_profile": cmd_set_profile,
+    "profile": cmd_profile,
 }
 
 
