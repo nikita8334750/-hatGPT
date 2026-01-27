@@ -3,6 +3,12 @@ __pycache__/
 *.pyo
 *.pyd
 
+.env
+.venv/
+
 # Local state
 assistant_state.json
 assistant_state.db
+
+# Docker
+postgres_data/
