@@ -5,3 +5,4 @@ __pycache__/
 
 # Local state
 assistant_state.json
+assistant_state.db

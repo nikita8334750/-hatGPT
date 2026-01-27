@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import shlex
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -110,7 +111,7 @@ class SmartAssistant:
         {"name": "варианты ответов", "keywords": ["варианты ответов", "response-variants", "set-response-variant"], "response": "Команды: response-variants и set-response-variant <номер>."},
         {"name": "telegram", "keywords": ["telegram", "телеграм"], "response": "Запуск: export TELEGRAM_BOT_TOKEN=...; python src/telegram_bot.py."},
         {"name": "запуск cli", "keywords": ["запуск", "cli", "терминал"], "response": "Запуск CLI: python src/assistant_bot.py."},
-        {"name": "хранение", "keywords": ["где хран", "storage", "json"], "response": "Состояние хранится локально в assistant_state.json рядом с кодом."},
+        {"name": "хранение", "keywords": ["где хран", "storage", "json", "db"], "response": "Состояние хранится локально в assistant_state.db рядом с кодом (SQLite)."},
         {"name": "безопасность", "keywords": ["безопасность", "privacy", "приватность"], "response": "Данные хранятся локально, без внешних сервисов (кроме Telegram при использовании)."},
         {"name": "интеграции", "keywords": ["интеграции", "api", "webhook"], "response": "Сейчас поддерживается Telegram и CLI. Другие интеграции не добавлены."},
         {"name": "ошибка", "keywords": ["ошибка", "bug", "не работает"], "response": "Опишите шаги и сообщение ошибки — помогу разобрать."},
@@ -150,16 +151,75 @@ class SmartAssistant:
         self.state = self._load_state()
 
     def _load_state(self) -> AssistantState:
+        if self.storage_path.suffix == ".db":
+            return self._load_state_from_db()
         if not self.storage_path.exists():
             return AssistantState()
         payload = json.loads(self.storage_path.read_text(encoding="utf-8"))
         return AssistantState.from_dict(payload)
 
     def _save_state(self) -> None:
+        if self.storage_path.suffix == ".db":
+            self._save_state_to_db()
+            return
         self.storage_path.write_text(
             json.dumps(self.state.to_dict(), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+
+    def _init_db(self, connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS assistant_state (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                payload TEXT NOT NULL
+            )
+            """
+        )
+        connection.commit()
+
+    def _load_state_from_db(self) -> AssistantState:
+        connection = sqlite3.connect(self.storage_path)
+        try:
+            self._init_db(connection)
+            cursor = connection.execute(
+                "SELECT payload FROM assistant_state WHERE id = 1"
+            )
+            row = cursor.fetchone()
+            if row is None:
+                state = AssistantState()
+                payload = json.dumps(
+                    state.to_dict(), ensure_ascii=False, indent=2
+                )
+                connection.execute(
+                    "INSERT INTO assistant_state (id, payload) VALUES (1, ?)",
+                    (payload,),
+                )
+                connection.commit()
+                return state
+            payload = json.loads(row[0])
+            return AssistantState.from_dict(payload)
+        finally:
+            connection.close()
+
+    def _save_state_to_db(self) -> None:
+        connection = sqlite3.connect(self.storage_path)
+        try:
+            self._init_db(connection)
+            payload = json.dumps(
+                self.state.to_dict(), ensure_ascii=False, indent=2
+            )
+            connection.execute(
+                """
+                INSERT INTO assistant_state (id, payload)
+                VALUES (1, ?)
+                ON CONFLICT(id) DO UPDATE SET payload = excluded.payload
+                """,
+                (payload,),
+            )
+            connection.commit()
+        finally:
+            connection.close()
 
     def _now(self) -> str:
         return datetime.now().strftime(DATE_FMT)
@@ -1409,5 +1469,5 @@ def run_cli(storage_path: Path) -> None:
 
 
 if __name__ == "__main__":
-    data_path = Path(__file__).with_name("assistant_state.json")
+    data_path = Path(__file__).with_name("assistant_state.db")
     run_cli(data_path)

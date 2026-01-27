@@ -246,7 +246,7 @@ def main() -> None:
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN не задан")
-    storage_path = Path(__file__).with_name("assistant_state.json")
+    storage_path = Path(__file__).with_name("assistant_state.db")
     assistant = TelegramAssistant(storage_path)
 
     app = Application.builder().token(token).build()
