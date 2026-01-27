@@ -39,7 +39,7 @@ class TelegramAssistant:
             return "Введите команду. Пример: /help"
         handler = TELEGRAM_COMMANDS.get(command)
         if not handler:
-            return "Неизвестная команда. Введите /help"
+            return self.bot.smart_answer(text)
         return handler(self, rest)
 
 
@@ -198,6 +198,12 @@ def cmd_set_response_variant(assistant: TelegramAssistant, rest: str) -> str:
     return assistant.bot.set_response_variant(int(rest))
 
 
+def cmd_ask(assistant: TelegramAssistant, rest: str) -> str:
+    if not rest:
+        return "Уточните вопрос."
+    return assistant.bot.smart_answer(rest)
+
+
 TELEGRAM_COMMANDS: dict[str, Callable[[TelegramAssistant, str], str]] = {
     "help": cmd_help,
     "add_task": cmd_add_task,
@@ -225,6 +231,7 @@ TELEGRAM_COMMANDS: dict[str, Callable[[TelegramAssistant, str], str]] = {
     "response": cmd_response,
     "response_variants": cmd_response_variants,
     "set_response_variant": cmd_set_response_variant,
+    "ask": cmd_ask,
 }
 
 

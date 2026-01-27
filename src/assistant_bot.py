@@ -76,6 +76,75 @@ class SmartAssistant:
         "emoji": ["нет", "минимум", "акцент"],
         "style": ["лаконичный", "аналитический", "мотивационный", "техничный"],
     }
+    INTENT_RESPONSES = [
+        {"name": "приветствие", "keywords": ["привет", "здравств", "добрый", "hello"], "response": "Привет! Чем помочь?"},
+        {"name": "помощь", "keywords": ["помощь", "help", "что умеешь"], "response": "Могу управлять задачами, заметками, привычками и давать стратегические ответы. Команда help покажет список."},
+        {"name": "добавить задачу", "keywords": ["добавь задачу", "создай задачу", "новая задача"], "response": "Используйте: add-task <текст> (CLI) или /add_task <текст> (Telegram)."},
+        {"name": "список задач", "keywords": ["список задач", "покажи задачи", "tasks"], "response": "Команда: list-tasks (CLI) или /tasks (Telegram)."},
+        {"name": "закрыть задачу", "keywords": ["закрыть задачу", "выполнить задачу", "done"], "response": "Команда: done <номер> (CLI) или /done <номер> (Telegram)."},
+        {"name": "удалить задачу", "keywords": ["удалить задачу", "remove task", "remove-task"], "response": "Команда: remove-task <номер> (CLI) или /remove_task <номер> (Telegram)."},
+        {"name": "очистить выполненные", "keywords": ["очистить выполненные", "clear done", "clear-done"], "response": "Команда: clear-done (CLI) или /clear_done (Telegram)."},
+        {"name": "добавить заметку", "keywords": ["добавь заметку", "новая заметка"], "response": "Команда: add-note <заголовок> :: <тело>."},
+        {"name": "список заметок", "keywords": ["список заметок", "покажи заметки", "notes"], "response": "Команда: list-notes (CLI) или /notes (Telegram)."},
+        {"name": "удалить заметку", "keywords": ["удалить заметку", "remove note"], "response": "Команда: remove-note <номер> (CLI) или /remove_note <номер> (Telegram)."},
+        {"name": "добавить привычку", "keywords": ["добавь привычку", "новая привычка"], "response": "Команда: add-habit <название> :: <частота>."},
+        {"name": "список привычек", "keywords": ["список привычек", "покажи привычки"], "response": "Команда: list-habits."},
+        {"name": "отметить привычку", "keywords": ["отметь привычку", "habit done"], "response": "Команда: habit-done <номер>."},
+        {"name": "покупки", "keywords": ["покупки", "список покупок", "buys"], "response": "Команды: add-buy, list-buys, buy."},
+        {"name": "напоминания", "keywords": ["напоминани", "remind"], "response": "Команды: remind, list-reminders, remind-done."},
+        {"name": "поиск", "keywords": ["поиск", "search"], "response": "Команда: search <запрос>."},
+        {"name": "статистика", "keywords": ["статистика", "stats", "сводка"], "response": "Команда: stats."},
+        {"name": "экспорт", "keywords": ["экспорт", "export"], "response": "Команда: export <путь>."},
+        {"name": "импорт", "keywords": ["импорт", "import"], "response": "Команда: import <путь>."},
+        {"name": "приоритет", "keywords": ["приоритет", "priority"], "response": "Команда: set-priority <номер> :: <уровень>."},
+        {"name": "срок", "keywords": ["срок", "deadline", "due"], "response": "Команда: set-due <номер> :: <YYYY-MM-DD>."},
+        {"name": "повестка", "keywords": ["повестка", "agenda"], "response": "Команда: agenda."},
+        {"name": "вариативность", "keywords": ["вариатив", "варианты", "variations"], "response": "Команда: variations <тема>."},
+        {"name": "анализ", "keywords": ["анализ", "analyze"], "response": "Команда: analyze <контекст>."},
+        {"name": "план", "keywords": ["план", "plan"], "response": "Команда: plan <контекст>."},
+        {"name": "питч", "keywords": ["питч", "pitch"], "response": "Команда: pitch <контекст>."},
+        {"name": "оценка", "keywords": ["оценка", "estimate"], "response": "Команда: estimate <контекст>."},
+        {"name": "техразбор", "keywords": ["технический", "tech", "архитектур"], "response": "Команда: tech <контекст>."},
+        {"name": "профиль", "keywords": ["профиль", "profile"], "response": "Команды: set-profile и profile."},
+        {"name": "параметры ответов", "keywords": ["параметры ответов", "response", "тон", "детальность", "формат"], "response": "Команды: set-response и response."},
+        {"name": "варианты ответов", "keywords": ["варианты ответов", "response-variants", "set-response-variant"], "response": "Команды: response-variants и set-response-variant <номер>."},
+        {"name": "telegram", "keywords": ["telegram", "телеграм"], "response": "Запуск: export TELEGRAM_BOT_TOKEN=...; python src/telegram_bot.py."},
+        {"name": "запуск cli", "keywords": ["запуск", "cli", "терминал"], "response": "Запуск CLI: python src/assistant_bot.py."},
+        {"name": "хранение", "keywords": ["где хран", "storage", "json"], "response": "Состояние хранится локально в assistant_state.json рядом с кодом."},
+        {"name": "безопасность", "keywords": ["безопасность", "privacy", "приватность"], "response": "Данные хранятся локально, без внешних сервисов (кроме Telegram при использовании)."},
+        {"name": "интеграции", "keywords": ["интеграции", "api", "webhook"], "response": "Сейчас поддерживается Telegram и CLI. Другие интеграции не добавлены."},
+        {"name": "ошибка", "keywords": ["ошибка", "bug", "не работает"], "response": "Опишите шаги и сообщение ошибки — помогу разобрать."},
+        {"name": "предложения", "keywords": ["предложение", "идея", "улучшение"], "response": "Сформулируйте цель улучшения и ограничения — предложу план."},
+        {"name": "стоимость", "keywords": ["стоимость", "цена", "price"], "response": "I don't have reliable information on this."},
+        {"name": "дорожная карта", "keywords": ["roadmap", "дорожная карта"], "response": "I don't have reliable information on this."},
+        {"name": "инструкции", "keywords": ["инструкция", "как пользоваться"], "response": "Используйте help для списка команд и README для примеров."},
+        {"name": "время", "keywords": ["время", "time"], "response": "Команды с датой используют формат YYYY-MM-DD."},
+        {"name": "экспорт бэкап", "keywords": ["бэкап", "backup"], "response": "Сделайте export в файл, затем сохраните его отдельно."},
+        {"name": "скорость", "keywords": ["быстро", "скорость", "performance"], "response": "Оптимизации выполнены на уровне логики; критично влияет объём данных."},
+        {"name": "роль", "keywords": ["роль", "role"], "response": "Задайте роль через set-profile, чтобы ответы были релевантнее."},
+        {"name": "ограничения", "keywords": ["ограничения", "constraints"], "response": "Укажите ограничения в профиле или в запросе."},
+        {"name": "метрики", "keywords": ["метрики", "kpi"], "response": "В анализе используйте KPI: активация, конверсия, ROI."},
+        {"name": "mvp", "keywords": ["mvp", "минимальный продукт"], "response": "Рекомендуется MVP с одной ключевой функцией для проверки спроса."},
+        {"name": "клиенты", "keywords": ["клиент", "user", "пользователь"], "response": "Сфокусируйтесь на проблеме и ценности для пользователя."},
+        {"name": "финансы", "keywords": ["бюджет", "fin", "финансы"], "response": "Зафиксируйте бюджет/сроки в профиле, затем планируйте шаги."},
+        {"name": "риски", "keywords": ["риск", "risks"], "response": "Используйте premortem и second-order для оценки рисков."},
+        {"name": "приоритизация", "keywords": ["приоритизация", "prioritize"], "response": "Команда: priority <тема>."},
+        {"name": "чек-лист", "keywords": ["чек-лист", "checklist"], "response": "Команда: checklist <тема>."},
+        {"name": "структура", "keywords": ["структура ответа", "формат ответа"], "response": "Параметры ответа задаются через set-response или set-response-variant."},
+        {"name": "эмодзи", "keywords": ["эмодзи", "emoji"], "response": "Вариант эмодзи выбирается через set-response-variant."},
+        {"name": "стиль", "keywords": ["стиль", "style"], "response": "Стиль ответа выбирается через set-response-variant."},
+        {"name": "таблица", "keywords": ["таблица", "table"], "response": "Структура ответа может быть 'таблица' через set-response-variant."},
+        {"name": "шаги", "keywords": ["шаги", "steps"], "response": "Структура 'шаги' доступна через set-response-variant."},
+        {"name": "итог", "keywords": ["итог", "summary"], "response": "Могу дать краткий итог по запросу — уточните контекст."},
+        {"name": "отчёт", "keywords": ["отчёт", "report"], "response": "Сформулируйте тему отчёта и критерии — подготовлю структуру."},
+        {"name": "получить помощь", "keywords": ["что делать дальше", "next"], "response": "Опишите цель, ограничения и желаемый результат."},
+        {"name": "поддержка", "keywords": ["support", "поддержка"], "response": "Опишите проблему — помогу диагностировать."},
+        {"name": "разработка", "keywords": ["разработка", "dev"], "response": "Могу предложить план реализации и технический разбор."},
+        {"name": "бизнес", "keywords": ["бизнес", "market"], "response": "Могу сделать анализ, питч и план."},
+        {"name": "тесты", "keywords": ["тесты", "testing"], "response": "Тестирование включает unit, интеграционные и e2e."},
+        {"name": "инструменты", "keywords": ["инструменты", "tools"], "response": "Сейчас доступны команды CLI/Telegram и стратегические модули."},
+        {"name": "команды", "keywords": ["команды", "commands"], "response": "Введите help для списка команд."},
+    ]
     def __init__(self, storage_path: Path) -> None:
         self.storage_path = storage_path
         self.state = self._load_state()
@@ -408,6 +477,15 @@ class SmartAssistant:
         if matches == 0:
             return "Ничего не найдено."
         return "\n".join(lines)
+
+    def smart_answer(self, question: str) -> str:
+        if not question.strip():
+            return "Уточните вопрос."
+        lower = question.lower()
+        for intent in self.INTENT_RESPONSES:
+            if any(keyword in lower for keyword in intent["keywords"]):
+                return intent["response"]
+        return "Не могу надёжно определить ответ. I don't have reliable information on this."
 
     def stats(self) -> str:
         total_tasks = len(self.state.tasks)
@@ -895,6 +973,7 @@ class AssistantCLI:
             "response": self.handle_response,
             "response-variants": self.handle_response_variants,
             "set-response-variant": self.handle_set_response_variant,
+            "ask": self.handle_ask,
         }
 
     @staticmethod
@@ -980,6 +1059,7 @@ class AssistantCLI:
             "  response                       - показать параметры\n"
             "  response-variants              - число вариантов\n"
             "  set-response-variant <номер>   - применить вариант\n"
+            "  ask <вопрос>                   - свободный вопрос\n"
             "  exit                          - выйти\n"
         )
 
@@ -1297,6 +1377,11 @@ class AssistantCLI:
             return "Укажите номер варианта."
         return self.bot.set_response_variant(int(args[0]))
 
+    def handle_ask(self, args: list[str]) -> str:
+        if not args:
+            return "Уточните вопрос."
+        return self.bot.smart_answer(" ".join(args))
+
     def run(self) -> None:
         print("Личный умный помощник. Введите help для списка команд.")
         while True:
@@ -1315,7 +1400,7 @@ class AssistantCLI:
             if handler:
                 print(handler(args))
             else:
-                print("Неизвестная команда. Введите help.")
+                print(self.bot.smart_answer(raw))
 
 
 def run_cli(storage_path: Path) -> None:
