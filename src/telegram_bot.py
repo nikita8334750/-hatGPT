@@ -188,6 +188,16 @@ def cmd_response(assistant: TelegramAssistant, rest: str) -> str:
     )
 
 
+def cmd_response_variants(assistant: TelegramAssistant, rest: str) -> str:
+    return f"Доступно вариантов: {assistant.bot.response_variants_count()}."
+
+
+def cmd_set_response_variant(assistant: TelegramAssistant, rest: str) -> str:
+    if not rest.isdigit():
+        return "Укажите номер варианта."
+    return assistant.bot.set_response_variant(int(rest))
+
+
 TELEGRAM_COMMANDS: dict[str, Callable[[TelegramAssistant, str], str]] = {
     "help": cmd_help,
     "add_task": cmd_add_task,
@@ -213,6 +223,8 @@ TELEGRAM_COMMANDS: dict[str, Callable[[TelegramAssistant, str], str]] = {
     "profile": cmd_profile,
     "set_response": cmd_set_response,
     "response": cmd_response,
+    "response_variants": cmd_response_variants,
+    "set_response_variant": cmd_set_response_variant,
 }
 
 

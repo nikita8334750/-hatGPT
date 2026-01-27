@@ -68,6 +68,14 @@ class AssistantState:
 
 
 class SmartAssistant:
+    RESPONSE_OPTIONS = {
+        "tone": ["нейтральный", "деловой", "дружелюбный"],
+        "detail": ["кратко", "средне", "подробно"],
+        "format": ["список", "абзац"],
+        "structure": ["свободная", "шаги", "чек-лист", "таблица"],
+        "emoji": ["нет", "минимум", "акцент"],
+        "style": ["лаконичный", "аналитический", "мотивационный", "техничный"],
+    }
     def __init__(self, storage_path: Path) -> None:
         self.storage_path = storage_path
         self.state = self._load_state()
@@ -308,6 +316,9 @@ class SmartAssistant:
             "tone": "нейтральный",
             "detail": "средне",
             "format": "список",
+            "structure": "свободная",
+            "emoji": "нет",
+            "style": "лаконичный",
         }
         return {**defaults, **self.state.response_settings}
 
@@ -336,6 +347,32 @@ class SmartAssistant:
         if not tone_norm or not detail_norm or not format_norm:
             return None
         return {"tone": tone_norm, "detail": detail_norm, "format": format_norm}
+
+    def response_variants_count(self) -> int:
+        count = 1
+        for values in self.RESPONSE_OPTIONS.values():
+            count *= len(values)
+        return count
+
+    def response_variant(self, index: int) -> dict[str, str] | None:
+        count = self.response_variants_count()
+        if index < 1 or index > count:
+            return None
+        idx = index - 1
+        settings: dict[str, str] = {}
+        for key, values in self.RESPONSE_OPTIONS.items():
+            base = len(values)
+            settings[key] = values[idx % base]
+            idx //= base
+        return settings
+
+    def set_response_variant(self, index: int) -> str:
+        settings = self.response_variant(index)
+        if settings is None:
+            return f"Неверный индекс варианта. Допустимо: 1..{self.response_variants_count()}."
+        self.state.response_settings = settings
+        self._save_state()
+        return f"Применён вариант #{index}."
 
     def search(self, query: str) -> str:
         query_lower = query.lower()
@@ -670,6 +707,9 @@ class StrategicToolkit:
         tone = settings.get("tone", "нейтральный")
         detail = settings.get("detail", "средне")
         format_style = settings.get("format", "список")
+        structure = settings.get("structure", "свободная")
+        emoji = settings.get("emoji", "нет")
+        style = settings.get("style", "лаконичный")
 
         if detail == "кратко":
             trimmed = [lines[0]]
@@ -685,9 +725,20 @@ class StrategicToolkit:
         elif tone == "дружелюбный":
             lines.insert(1, "Тон: дружелюбный.")
 
+        if structure != "свободная":
+            lines.insert(2, f"Структура: {structure}.")
+
+        if style != "лаконичный":
+            lines.insert(3, f"Стиль: {style}.")
+
         if format_style == "абзац":
             text = " ".join(line.lstrip("- ").strip() for line in lines)
             return text
+
+        if emoji == "минимум":
+            lines = [line.replace("- ", "• ") for line in lines]
+        elif emoji == "акцент":
+            lines = [line.replace("- ", "✅ ") for line in lines]
 
         return "\n".join(lines)
 
@@ -842,6 +893,8 @@ class AssistantCLI:
             "profile": self.handle_profile,
             "set-response": self.handle_set_response,
             "response": self.handle_response,
+            "response-variants": self.handle_response_variants,
+            "set-response-variant": self.handle_set_response_variant,
         }
 
     @staticmethod
@@ -925,6 +978,8 @@ class AssistantCLI:
             "  profile                        - показать профиль\n"
             "  set-response <тон> :: <детальность> :: <формат> - ответы\n"
             "  response                       - показать параметры\n"
+            "  response-variants              - число вариантов\n"
+            "  set-response-variant <номер>   - применить вариант\n"
             "  exit                          - выйти\n"
         )
 
@@ -1232,6 +1287,15 @@ class AssistantCLI:
             f"- Детальность: {settings['detail']}\n"
             f"- Формат: {settings['format']}"
         )
+
+    def handle_response_variants(self, args: list[str]) -> str:
+        count = self.bot.response_variants_count()
+        return f"Доступно вариантов: {count}."
+
+    def handle_set_response_variant(self, args: list[str]) -> str:
+        if not args or not args[0].isdigit():
+            return "Укажите номер варианта."
+        return self.bot.set_response_variant(int(args[0]))
 
     def run(self) -> None:
         print("Личный умный помощник. Введите help для списка команд.")
