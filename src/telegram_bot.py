@@ -39,6 +39,9 @@ class TelegramAssistant:
             return "Введите команду. Пример: /help"
         handler = TELEGRAM_COMMANDS.get(command)
         if not handler:
+            interpreted = self.bot.interpret_message(text)
+            if interpreted:
+                return interpreted
             return self.bot.smart_answer(text)
         return handler(self, rest)
 

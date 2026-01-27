@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import shlex
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from pathlib import Path
 from typing import Callable
 
@@ -371,15 +372,32 @@ class SmartAssistant:
 
     def add_reminder(self, title: str, minutes: int) -> str:
         remind_at = datetime.now() + timedelta(minutes=minutes)
+        reminder = self._build_reminder(title, remind_at)
+        self.state.reminders.append(reminder)
+        self._save_state()
+        return f"Напоминание установлено на {reminder['remind_at']}"
+
+    def add_reminder_at(
+        self, title: str, remind_at: datetime, repeat: str | None = None
+    ) -> str:
+        reminder = self._build_reminder(title, remind_at, repeat)
+        self.state.reminders.append(reminder)
+        self._save_state()
+        repeat_note = f" (повтор: {repeat})" if repeat else ""
+        return f"Напоминание установлено на {reminder['remind_at']}{repeat_note}"
+
+    def _build_reminder(
+        self, title: str, remind_at: datetime, repeat: str | None = None
+    ) -> dict:
         reminder = {
             "title": title,
             "remind_at": remind_at.strftime(DATE_FMT),
             "created_at": self._now(),
             "done": False,
         }
-        self.state.reminders.append(reminder)
-        self._save_state()
-        return f"Напоминание установлено на {reminder['remind_at']}"
+        if repeat:
+            reminder["repeat"] = repeat
+        return reminder
 
     def list_reminders(self) -> str:
         if not self.state.reminders:
@@ -387,17 +405,233 @@ class SmartAssistant:
         lines = ["Напоминания:"]
         for index, reminder in enumerate(self.state.reminders, start=1):
             status = "✅" if reminder.get("done") else "⏰"
+            repeat = reminder.get("repeat")
+            repeat_note = f", повтор: {repeat}" if repeat else ""
             lines.append(
-                f"{index}. {status} {reminder['title']} (к {reminder['remind_at']})"
+                f"{index}. {status} {reminder['title']} (к {reminder['remind_at']}{repeat_note})"
             )
         return "\n".join(lines)
 
     def mark_reminder(self, index: int) -> str:
         if index < 1 or index > len(self.state.reminders):
             return "Неверный номер напоминания."
-        self.state.reminders[index - 1]["done"] = True
+        reminder = self.state.reminders[index - 1]
+        repeat = reminder.get("repeat")
+        if repeat:
+            current = datetime.strptime(reminder["remind_at"], DATE_FMT)
+            next_at = self._next_repeat_datetime(current, repeat)
+            reminder["remind_at"] = next_at.strftime(DATE_FMT)
+            reminder["done"] = False
+            self._save_state()
+            return f"Напоминание перенесено на {reminder['remind_at']}."
+        reminder["done"] = True
         self._save_state()
         return "Напоминание отмечено."
+
+    def _next_repeat_datetime(self, current: datetime, repeat: str) -> datetime:
+        if repeat == "daily":
+            return current + timedelta(days=1)
+        if repeat == "weekly":
+            return current + timedelta(days=7)
+        if repeat == "monthly":
+            return current + timedelta(days=30)
+        if repeat.startswith("weekly:"):
+            weekday = int(repeat.split(":", 1)[1])
+            days_ahead = (weekday - current.weekday() + 7) % 7
+            if days_ahead == 0:
+                days_ahead = 7
+            return current + timedelta(days=days_ahead)
+        return current + timedelta(days=1)
+
+    def interpret_message(self, message: str) -> str | None:
+        normalized = message.strip()
+        if not normalized:
+            return None
+        lower = normalized.lower()
+        if any(key in lower for key in ["что у меня на сегодня", "что на сегодня", "на сегодня"]):
+            return self.agenda()
+        if any(key in lower for key in ["список дел", "мои задачи", "задачи"]):
+            return self.list_tasks()
+        if any(key in lower for key in ["список покуп", "покупки"]):
+            return self.list_shopping()
+        if any(key in lower for key in ["заметки", "мои заметки"]):
+            return self.list_notes()
+        if any(word in lower for word in ["напомни", "напомнить", "remind"]):
+            return self._handle_natural_reminder(normalized)
+        if any(word in lower for word in ["купи", "купить", "добавь в список покупок"]):
+            return self._handle_natural_buy(normalized)
+        if any(word in lower for word in ["добавь задачу", "задача", "надо", "нужно", "сделай"]):
+            return self._handle_natural_task(normalized)
+        return None
+
+    def _handle_natural_buy(self, message: str) -> str:
+        title = self._strip_leading_phrases(
+            message,
+            [
+                "купи",
+                "купить",
+                "добавь в список покупок",
+                "добавь покупки",
+            ],
+        )
+        title = title.strip()
+        if not title:
+            return "Уточните, что нужно купить."
+        return self.add_shopping_item(title)
+
+    def _handle_natural_task(self, message: str) -> str:
+        date = self._parse_date_from_text(message)
+        title = self._strip_leading_phrases(
+            message,
+            ["добавь задачу", "задача", "надо", "нужно", "сделай"],
+        )
+        title = self._strip_date_phrases(title).strip(" ,.")
+        if not title:
+            return "Уточните задачу."
+        response = self.add_task(title)
+        if date:
+            self.set_task_due_date(len(self.state.tasks), date.strftime("%Y-%m-%d"))
+            return f"{response} Срок: {date.strftime('%Y-%m-%d')}."
+        return response
+
+    def _handle_natural_reminder(self, message: str) -> str:
+        parsed = self._parse_datetime_from_text(message)
+        if parsed is None:
+            return "Уточните дату и время для напоминания."
+        remind_at, repeat = parsed
+        title = self._strip_leading_phrases(
+            message,
+            ["напомни", "напомнить", "remind", "пожалуйста", "мне"],
+        )
+        title = self._strip_time_phrases(title).strip(" ,.")
+        if not title:
+            return "Уточните, о чём напомнить."
+        return self.add_reminder_at(title, remind_at, repeat)
+
+    def _parse_datetime_from_text(
+        self, message: str
+    ) -> tuple[datetime, str | None] | None:
+        lower = message.lower()
+        date = self._parse_date_from_text(lower)
+        time = self._parse_time_from_text(lower)
+        repeat = self._parse_repeat_from_text(lower)
+        if date is None and time is None:
+            return None
+        if date is None:
+            date = datetime.now()
+        if time is None:
+            return None
+        remind_at = datetime.combine(date.date(), time)
+        if remind_at < datetime.now():
+            remind_at += timedelta(days=1)
+        return remind_at, repeat
+
+    def _parse_time_from_text(self, text: str) -> time | None:
+        match = re.search(r"\b(\d{1,2})[:.](\d{2})\b", text)
+        if match:
+            hour = int(match.group(1))
+            minute = int(match.group(2))
+            if 0 <= hour < 24 and 0 <= minute < 60:
+                return datetime.now().replace(hour=hour, minute=minute, second=0, microsecond=0).time()
+        match = re.search(r"\b(\d{1,2})\s*(?:час|ч)\b", text)
+        if match:
+            hour = int(match.group(1))
+            minute_match = re.search(r"\b(\d{1,2})\s*мин", text)
+            minute = int(minute_match.group(1)) if minute_match else 0
+            if 0 <= hour < 24 and 0 <= minute < 60:
+                return datetime.now().replace(hour=hour, minute=minute, second=0, microsecond=0).time()
+        return None
+
+    def _parse_date_from_text(self, text: str) -> datetime | None:
+        lower = text.lower()
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        if "сегодня" in lower:
+            return today
+        if "завтра" in lower:
+            return today + timedelta(days=1)
+        if "послезавтра" in lower:
+            return today + timedelta(days=2)
+        weekdays = {
+            "понедельник": 0,
+            "вторник": 1,
+            "среду": 2,
+            "среда": 2,
+            "четверг": 3,
+            "пятницу": 4,
+            "пятница": 4,
+            "субботу": 5,
+            "суббота": 5,
+            "воскресенье": 6,
+        }
+        for name, weekday in weekdays.items():
+            if name in lower:
+                days_ahead = (weekday - today.weekday() + 7) % 7
+                if days_ahead == 0:
+                    days_ahead = 7
+                return today + timedelta(days=days_ahead)
+        match = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", lower)
+        if match:
+            year, month, day = map(int, match.groups())
+            try:
+                return datetime(year, month, day)
+            except ValueError:
+                return None
+        return None
+
+    def _parse_repeat_from_text(self, text: str) -> str | None:
+        lower = text.lower()
+        if "каждый день" in lower or "ежедневно" in lower:
+            return "daily"
+        if "каждую неделю" in lower or "еженедельно" in lower:
+            return "weekly"
+        if "каждый месяц" in lower or "ежемесячно" in lower:
+            return "monthly"
+        weekdays = {
+            "понедельник": 0,
+            "вторник": 1,
+            "среду": 2,
+            "среда": 2,
+            "четверг": 3,
+            "пятницу": 4,
+            "пятница": 4,
+            "субботу": 5,
+            "суббота": 5,
+            "воскресенье": 6,
+        }
+        for name, weekday in weekdays.items():
+            if f"каждый {name}" in lower or f"каждую {name}" in lower:
+                return f"weekly:{weekday}"
+        return None
+
+    def _strip_leading_phrases(self, text: str, phrases: list[str]) -> str:
+        cleaned = text.strip()
+        for phrase in phrases:
+            pattern = re.compile(rf"^\s*{re.escape(phrase)}\s*", re.IGNORECASE)
+            cleaned = pattern.sub("", cleaned)
+        return cleaned
+
+    def _strip_time_phrases(self, text: str) -> str:
+        cleaned = re.sub(r"\b(сегодня|завтра|послезавтра)\b", "", text, flags=re.IGNORECASE)
+        cleaned = re.sub(
+            r"\b(в\s+\d{1,2}[:.]\d{2}|\d{1,2}\s*(?:час|ч)(?:\s*\d{1,2}\s*мин)?)\b",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(
+            r"\b(в\s+понедельник|во\s+вторник|в\s+среду|в\s+четверг|в\s+пятницу|в\s+субботу|в\s+воскресенье)\b",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(r"\bкаждый\b|\bкаждую\b|\bежедневно\b|\bеженедельно\b|\bежемесячно\b", "", cleaned, flags=re.IGNORECASE)
+        return cleaned
+
+    def _strip_date_phrases(self, text: str) -> str:
+        cleaned = self._strip_time_phrases(text)
+        cleaned = re.sub(r"\bдо\b|\bк\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\b\d{4}-\d{2}-\d{2}\b", "", cleaned)
+        return cleaned
 
     def add_quick_answer(self, key: str, value: str) -> str:
         self.state.quick_answers[key] = value
@@ -1460,7 +1694,11 @@ class AssistantCLI:
             if handler:
                 print(handler(args))
             else:
-                print(self.bot.smart_answer(raw))
+                interpreted = self.bot.interpret_message(raw)
+                if interpreted:
+                    print(interpreted)
+                else:
+                    print(self.bot.smart_answer(raw))
 
 
 def run_cli(storage_path: Path) -> None:
