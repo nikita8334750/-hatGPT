@@ -6,7 +6,7 @@ A Telegram bot that provides currency conversion with near-real-time updates, pr
 - Background rate updates every `UPDATE_INTERVAL_SECONDS` (default 60).
 - Redis cache for rate snapshots and health info.
 - Provider failover with circuit breaker.
-- Commands: `/rate`, `/convert`, `/status`, `/base`, `/precision`, `/watch`, `/watchlist`, `/unwatch`, `/history`.
+- Commands: `/rate`, `/convert`, `/status`, `/base`, `/precision`, `/watch`, `/watchlist`, `/unwatch`, `/currencies`, `/history`.
 - Optional Postgres history storage (requires `asyncpg`).
 
 ## Environment variables
@@ -50,6 +50,7 @@ docker-compose --profile history up --build
 - `/watch USD EUR 1.1` or `/watch USD EUR 2%`
 - `/watchlist`
 - `/unwatch <id>`
+- `/currencies`
 - `/history USD EUR 24h`
 
 ## Tests

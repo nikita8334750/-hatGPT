@@ -25,6 +25,8 @@ class RedisStore:
             "fetched_at": snapshot.fetched_at,
         }
         await self._redis.set(f"rates:{snapshot.base}", json.dumps(payload))
+        currencies = sorted({snapshot.base, *snapshot.rates.keys()})
+        await self._redis.set(f"currencies:{snapshot.base}", json.dumps(currencies))
 
     async def get_rates_snapshot(self, base: str) -> RatesSnapshot | None:
         raw = await self._redis.get(f"rates:{base}")
@@ -38,6 +40,12 @@ class RedisStore:
             as_of=data["as_of"],
             fetched_at=data["fetched_at"],
         )
+
+    async def get_currencies(self, base: str) -> list[str]:
+        raw = await self._redis.get(f"currencies:{base}")
+        if not raw:
+            return []
+        return json.loads(raw)
 
     async def set_health(self, health: HealthStatus) -> None:
         payload = {

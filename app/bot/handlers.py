@@ -63,6 +63,7 @@ def setup_router(
             "/watch <FROM> <TO> <target_rate|delta%>\n"
             "/watchlist\n"
             "/unwatch <id>\n"
+            "/currencies\n"
             "/history <FROM> <TO> 24h|7d"
         )
 
@@ -186,6 +187,18 @@ def setup_router(
             for watch in watches
         ]
         await message.answer("Active watches:\n" + "\n".join(lines))
+
+    @router.message(F.text.startswith("/currencies"))
+    async def cmd_currencies(message: Message) -> None:
+        if rate_limiter and not rate_limiter.allow(message.chat.id):
+            await message.answer("You're doing that too fast. Please wait a moment.")
+            return
+        base = await store.get_chat_base(message.chat.id) or default_base
+        currencies = await store.get_currencies(base)
+        if not currencies:
+            await message.answer("Currencies are not available yet.")
+            return
+        await message.answer(f"Available currencies for {base}:\\n" + ", ".join(currencies))
 
     @router.message(F.text.startswith("/unwatch"))
     async def cmd_unwatch(message: Message) -> None:
