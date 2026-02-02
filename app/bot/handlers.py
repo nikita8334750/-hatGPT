@@ -78,12 +78,14 @@ def setup_router(
             await message.answer("No rates available yet.")
             return
         warning = _staleness_warning(snapshot.fetched_at, max_staleness_seconds)
+        error_line = f"\nLast error: {health.last_error}" if health.last_error else ""
         await message.answer(
             "Status:\n"
             f"Active provider: {health.active_provider}\n"
             f"Last success: {health.last_success_at}\n"
             f"Staleness: {_staleness_seconds(snapshot.fetched_at)}s\n"
             f"Snapshot base: {snapshot.base}"
+            f"{error_line}"
             f"{warning}"
         )
 
