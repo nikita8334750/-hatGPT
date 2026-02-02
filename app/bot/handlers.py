@@ -16,7 +16,8 @@ from app.bot.rate_limit import RateLimiter
 from app.services.conversion import convert_amount, format_decimal, get_rate
 from app.services.history import HistoryWriter
 from app.services.watches import add_watch
-from app.storage.redis_store import RatesSnapshot, RedisStore
+from app.storage.models import RatesSnapshot
+from app.storage.redis_store import RedisStore
 
 logger = logging.getLogger(__name__)
 

@@ -7,7 +7,8 @@ from aiogram import Bot
 
 from app.services.provider_manager import ProviderManager
 from app.services.watches import evaluate_watches
-from app.storage.redis_store import RatesSnapshot, RedisStore
+from app.storage.models import RatesSnapshot
+from app.storage.redis_store import RedisStore
 
 logger = logging.getLogger(__name__)
 

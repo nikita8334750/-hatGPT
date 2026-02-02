@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 
-from app.storage.redis_store import RatesSnapshot
+from app.storage.models import RatesSnapshot
 
 
 @dataclass(frozen=True)

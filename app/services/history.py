@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from app.storage.redis_store import RatesSnapshot
+from app.storage.models import RatesSnapshot
 
 
 @dataclass

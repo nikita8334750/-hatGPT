@@ -1,31 +1,15 @@
 import json
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
 from redis.asyncio import Redis
 
+from app.storage.models import HealthStatus, RatesSnapshot
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-@dataclass(frozen=True)
-class RatesSnapshot:
-    base: str
-    rates: dict[str, Decimal]
-    provider: str
-    as_of: str
-    fetched_at: str
-
-
-@dataclass(frozen=True)
-class HealthStatus:
-    active_provider: str
-    last_success_at: str | None
-    last_error: str | None
-    staleness_seconds: int
 
 
 class RedisStore:

@@ -1,7 +1,8 @@
 from decimal import Decimal
 
-import fakeredis.aioredis
 import pytest
+
+fakeredis = pytest.importorskip("fakeredis.aioredis")
 
 from app.services.provider_manager import ProviderManager
 from app.services.updater import update_once
@@ -22,7 +23,7 @@ class FakeBot:
 
 @pytest.mark.asyncio
 async def test_update_once_writes_snapshot():
-    redis = fakeredis.aioredis.FakeRedis()
+    redis = fakeredis.FakeRedis()
     store = RedisStore(redis)
     manager = ProviderManager(FakeProvider(), FakeProvider())
     await update_once(FakeBot(), store, manager, "USD", cooldown_seconds=1)

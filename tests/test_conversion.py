@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from app.services.conversion import convert_amount, format_decimal, get_rate
-from app.storage.redis_store import RatesSnapshot
+from app.storage.models import RatesSnapshot
 
 
 def test_cross_rate():

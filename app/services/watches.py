@@ -7,7 +7,8 @@ from uuid import uuid4
 from aiogram import Bot
 
 from app.services.conversion import get_rate
-from app.storage.redis_store import RatesSnapshot, RedisStore
+from app.storage.models import RatesSnapshot
+from app.storage.redis_store import RedisStore
 
 logger = logging.getLogger(__name__)
 
