@@ -194,11 +194,20 @@ def setup_router(
             await message.answer("You're doing that too fast. Please wait a moment.")
             return
         base = await store.get_chat_base(message.chat.id) or default_base
-        currencies = await store.get_currencies(base)
-        if not currencies:
+        snapshot = await _get_snapshot(store, base)
+        if not snapshot:
             await message.answer("Currencies are not available yet.")
             return
-        await message.answer(f"Available currencies for {base}:\\n" + ", ".join(currencies))
+        currencies = await store.get_currencies(base)
+        if not currencies:
+            currencies = sorted({snapshot.base, *snapshot.rates.keys()})
+        warning = _staleness_warning(snapshot.fetched_at, max_staleness_seconds)
+        await message.answer(
+            f"Available currencies for {base}:\\n"
+            + \", \".join(currencies)
+            + f\"\\n{_format_snapshot(snapshot)}\"
+            + warning
+        )
 
     @router.message(F.text.startswith("/unwatch"))
     async def cmd_unwatch(message: Message) -> None:
