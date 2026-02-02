@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-import asyncpg
-
 from app.storage.redis_store import RatesSnapshot
 
 
@@ -14,9 +12,14 @@ class HistoryConfig:
 class HistoryWriter:
     def __init__(self, config: HistoryConfig):
         self._config = config
-        self._pool: asyncpg.Pool | None = None
+        self._pool = None
 
     async def connect(self) -> None:
+        try:
+            import asyncpg  # type: ignore
+        except ImportError as exc:
+            raise RuntimeError("asyncpg is required for history support") from exc
+
         self._pool = await asyncpg.create_pool(self._config.dsn)
         async with self._pool.acquire() as conn:
             await conn.execute(

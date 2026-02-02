@@ -7,7 +7,7 @@ A Telegram bot that provides currency conversion with near-real-time updates, pr
 - Redis cache for rate snapshots and health info.
 - Provider failover with circuit breaker.
 - Commands: `/rate`, `/convert`, `/status`, `/base`, `/precision`, `/watch`, `/watchlist`, `/unwatch`, `/history`.
-- Optional Postgres history storage.
+- Optional Postgres history storage (requires `asyncpg`).
 
 ## Environment variables
 | Variable | Description | Default |
