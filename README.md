@@ -20,6 +20,7 @@ A Telegram bot that provides currency conversion with near-real-time updates, pr
 | `DEFAULT_BASE` | Default base currency | `USD` |
 | `MAX_STALENESS_SECONDS` | Staleness warning threshold | `3600` |
 | `WATCH_COOLDOWN_SECONDS` | Watch notification cooldown | `300` |
+| `RATE_LIMIT_SECONDS` | Per-chat command rate limit | `2` |
 | `ENABLE_HISTORY` | Enable Postgres history | `false` |
 | `POSTGRES_DSN` | Postgres connection string | empty |
 

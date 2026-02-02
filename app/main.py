@@ -5,6 +5,7 @@ from aiogram import Bot, Dispatcher
 from redis.asyncio import Redis
 
 from app.bot.handlers import setup_router
+from app.bot.rate_limit import RateLimiter
 from app.config import Settings
 from app.providers.free_fallback import FreeFallbackProvider
 from app.providers.near_real_time import NearRealTimeProvider
@@ -47,6 +48,7 @@ async def main() -> None:
             settings.default_base,
             settings.max_staleness_seconds,
             history_writer,
+            RateLimiter(settings.rate_limit_seconds),
         )
     )
 

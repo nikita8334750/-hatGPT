@@ -17,6 +17,7 @@ class Settings:
     default_base: str
     max_staleness_seconds: int
     watch_cooldown_seconds: int
+    rate_limit_seconds: int
     enable_history: bool
     postgres_dsn: str | None
 
@@ -32,6 +33,7 @@ class Settings:
             default_base=_get_env("DEFAULT_BASE", "USD"),
             max_staleness_seconds=int(_get_env("MAX_STALENESS_SECONDS", "3600")),
             watch_cooldown_seconds=int(_get_env("WATCH_COOLDOWN_SECONDS", "300")),
+            rate_limit_seconds=int(_get_env("RATE_LIMIT_SECONDS", "2")),
             enable_history=_get_env("ENABLE_HISTORY", "false").lower() == "true",
             postgres_dsn=os.getenv("POSTGRES_DSN"),
         )

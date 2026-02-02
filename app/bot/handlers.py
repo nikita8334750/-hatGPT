@@ -12,6 +12,7 @@ from app.bot.parsing import (
     parse_rate_args,
     parse_watch_args,
 )
+from app.bot.rate_limit import RateLimiter
 from app.services.conversion import convert_amount, format_decimal, get_rate
 from app.services.history import HistoryWriter
 from app.services.watches import add_watch
@@ -45,6 +46,7 @@ def setup_router(
     default_base: str,
     max_staleness_seconds: int,
     history_writer: HistoryWriter | None = None,
+    rate_limiter: RateLimiter | None = None,
 ) -> Router:
     router = Router()
 
@@ -65,6 +67,9 @@ def setup_router(
 
     @router.message(F.text.startswith("/status"))
     async def cmd_status(message: Message) -> None:
+        if rate_limiter and not rate_limiter.allow(message.chat.id):
+            await message.answer("You're doing that too fast. Please wait a moment.")
+            return
         health = await store.get_health()
         snapshot = await _get_snapshot(store, default_base)
         if not health or not snapshot:
@@ -82,6 +87,9 @@ def setup_router(
 
     @router.message(F.text.startswith("/base"))
     async def cmd_base(message: Message) -> None:
+        if rate_limiter and not rate_limiter.allow(message.chat.id):
+            await message.answer("You're doing that too fast. Please wait a moment.")
+            return
         parts = message.text.split(maxsplit=1)
         if len(parts) != 2:
             await message.answer("Usage: /base <CURRENCY>")
@@ -92,6 +100,9 @@ def setup_router(
 
     @router.message(F.text.startswith("/precision"))
     async def cmd_precision(message: Message) -> None:
+        if rate_limiter and not rate_limiter.allow(message.chat.id):
+            await message.answer("You're doing that too fast. Please wait a moment.")
+            return
         parts = message.text.split(maxsplit=1)
         precision = parse_precision_args(parts[1] if len(parts) > 1 else "")
         if precision is None:
@@ -102,6 +113,9 @@ def setup_router(
 
     @router.message(F.text.startswith("/rate"))
     async def cmd_rate(message: Message) -> None:
+        if rate_limiter and not rate_limiter.allow(message.chat.id):
+            await message.answer("You're doing that too fast. Please wait a moment.")
+            return
         args = message.text.removeprefix("/rate").strip()
         parsed = parse_rate_args(args)
         if not parsed:
@@ -128,6 +142,9 @@ def setup_router(
 
     @router.message(F.text.startswith("/convert"))
     async def cmd_convert(message: Message) -> None:
+        if rate_limiter and not rate_limiter.allow(message.chat.id):
+            await message.answer("You're doing that too fast. Please wait a moment.")
+            return
         args = message.text.removeprefix("/convert").strip()
         parsed = parse_convert_args(args)
         if not parsed:
@@ -156,6 +173,9 @@ def setup_router(
 
     @router.message(F.text.startswith("/watchlist"))
     async def cmd_watchlist(message: Message) -> None:
+        if rate_limiter and not rate_limiter.allow(message.chat.id):
+            await message.answer("You're doing that too fast. Please wait a moment.")
+            return
         watches = await store.list_watches(message.chat.id)
         if not watches:
             await message.answer("No active watches.")
@@ -168,6 +188,9 @@ def setup_router(
 
     @router.message(F.text.startswith("/unwatch"))
     async def cmd_unwatch(message: Message) -> None:
+        if rate_limiter and not rate_limiter.allow(message.chat.id):
+            await message.answer("You're doing that too fast. Please wait a moment.")
+            return
         parts = message.text.split(maxsplit=1)
         if len(parts) != 2:
             await message.answer("Usage: /unwatch <id>")
@@ -177,6 +200,9 @@ def setup_router(
 
     @router.message(F.text.startswith("/watch"))
     async def cmd_watch(message: Message) -> None:
+        if rate_limiter and not rate_limiter.allow(message.chat.id):
+            await message.answer("You're doing that too fast. Please wait a moment.")
+            return
         args = message.text.removeprefix("/watch").strip()
         parsed = parse_watch_args(args)
         if not parsed:
@@ -205,6 +231,9 @@ def setup_router(
 
     @router.message(F.text.startswith("/history"))
     async def cmd_history(message: Message) -> None:
+        if rate_limiter and not rate_limiter.allow(message.chat.id):
+            await message.answer("You're doing that too fast. Please wait a moment.")
+            return
         if not history_writer:
             await message.answer("History is disabled.")
             return
