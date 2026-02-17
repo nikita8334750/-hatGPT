@@ -60,32 +60,50 @@ class LogisticsService:
         arrival_city: str,
         earliest_departure: Optional[str] = None,
     ) -> List[RouteSegment]:
-        """Находит последовательность сегментов с минимальным временем прибытия."""
+        """Находит маршрут(ы) с минимальным временем прибытия из A в B."""
         start_time = parse_time(earliest_departure) if earliest_departure else parse_time("00:00")
+
         graph: Dict[str, List[RouteSegment]] = {}
         for segment in self.segments.values():
             graph.setdefault(segment.departure_city, []).append(segment)
 
-        pq: List[Tuple[datetime, str, List[str]]] = [(start_time, departure_city, [])]
-        visited: Dict[Tuple[str, str], datetime] = {}
+        best_time: Dict[str, datetime] = {departure_city: start_time}
+        previous_city: Dict[str, str] = {}
+        previous_segment: Dict[str, RouteSegment] = {}
+        queue: List[Tuple[datetime, str]] = [(start_time, departure_city)]
 
-        while pq:
-            current_time, city, path_ids = heapq.heappop(pq)
-            key = (city, ",".join(path_ids))
-            if key in visited and visited[key] <= current_time:
+        while queue:
+            current_time, city = heapq.heappop(queue)
+            if current_time > best_time.get(city, parse_time("23:59")):
                 continue
-            visited[key] = current_time
 
             if city == arrival_city:
-                return [self.segments[route_id] for route_id in path_ids]
+                break
 
             for segment in graph.get(city, []):
                 dep_time = parse_time(segment.departure_time)
                 arr_time = parse_time(segment.arrival_time)
-                if dep_time >= current_time:
-                    heapq.heappush(pq, (arr_time, segment.arrival_city, path_ids + [segment.route_id]))
+                if dep_time < current_time:
+                    continue
 
-        return []
+                best_arrival = best_time.get(segment.arrival_city)
+                if best_arrival is None or arr_time < best_arrival:
+                    best_time[segment.arrival_city] = arr_time
+                    previous_city[segment.arrival_city] = city
+                    previous_segment[segment.arrival_city] = segment
+                    heapq.heappush(queue, (arr_time, segment.arrival_city))
+
+        if arrival_city not in previous_segment:
+            return []
+
+        result: List[RouteSegment] = []
+        current = arrival_city
+        while current != departure_city:
+            segment = previous_segment[current]
+            result.append(segment)
+            current = previous_city[current]
+        result.reverse()
+        return result
 
     def book_seats(self, route_id: str, passenger_name: str, seats: int) -> Booking:
         if seats <= 0:
@@ -131,13 +149,19 @@ class LogisticsService:
 
     def schedule_for_driver(self, driver_name: str) -> List[RouteSegment]:
         return sorted(
-            [segment for segment in self.segments.values() if segment.driver_name == driver_name],
+            [segment for segment in self.segments.values() if segment.driver_name.lower() == driver_name.lower()],
             key=lambda x: parse_time(x.departure_time),
         )
 
     def schedule_for_passenger(self, city: str) -> List[RouteSegment]:
+        city_normalized = city.lower()
         return sorted(
-            [segment for segment in self.segments.values() if segment.departure_city == city or segment.arrival_city == city],
+            [
+                segment
+                for segment in self.segments.values()
+                if segment.departure_city.lower() == city_normalized
+                or segment.arrival_city.lower() == city_normalized
+            ],
             key=lambda x: parse_time(x.departure_time),
         )
 
