@@ -3,12 +3,99 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Dict, List
+from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
-from logistics import LogisticsService, RouteSegment, SAMPLE_SEGMENTS
+from logistics import Booking, LogisticsService, ParcelOrder, RouteSegment, SAMPLE_SEGMENTS
 
-service = LogisticsService(SAMPLE_SEGMENTS)
+
+class SelfHealingLogistics:
+    """Обёртка над сервисом с авто-восстановлением после ошибок."""
+
+    def __init__(self, seed_segments: List[RouteSegment]) -> None:
+        self.seed_segments = seed_segments
+        self.service = LogisticsService(self._clone_seed_segments())
+        self.heal_count = 0
+        self.errors_count = 0
+        self.last_error = ""
+        self.events: List[Dict[str, Any]] = []
+
+    def _clone_seed_segments(self) -> List[RouteSegment]:
+        return [
+            RouteSegment(
+                segment.route_id,
+                segment.departure_city,
+                segment.arrival_city,
+                segment.departure_time,
+                segment.arrival_time,
+                segment.capacity,
+                segment.driver_name,
+            )
+            for segment in self.seed_segments
+        ]
+
+    def _replay_events(self) -> None:
+        for event in self.events:
+            try:
+                if event["type"] == "booking":
+                    self.service.book_seats(event["route_id"], event["passenger_name"], event["seats"])
+                if event["type"] == "parcel":
+                    self.service.register_parcel(
+                        event["route_id"],
+                        event["sender_name"],
+                        event["recipient_name"],
+                        event["description"],
+                    )
+            except ValueError:
+                continue
+
+    def heal(self, reason: str) -> None:
+        self.heal_count += 1
+        self.last_error = reason
+        self.service = LogisticsService(self._clone_seed_segments())
+        self._replay_events()
+
+    def run(self, operation: Callable[[LogisticsService], Any], label: str = "operation") -> Any:
+        try:
+            return operation(self.service)
+        except Exception as exc:
+            self.errors_count += 1
+            self.heal(f"{label}: {exc}")
+            return operation(self.service)
+
+    def record_booking(self, booking: Booking) -> None:
+        self.events.append(
+            {
+                "type": "booking",
+                "route_id": booking.route_id,
+                "passenger_name": booking.passenger_name,
+                "seats": booking.seats,
+            }
+        )
+
+    def record_parcel(self, parcel: ParcelOrder) -> None:
+        self.events.append(
+            {
+                "type": "parcel",
+                "route_id": parcel.route_id,
+                "sender_name": parcel.sender_name,
+                "recipient_name": parcel.recipient_name,
+                "description": parcel.description,
+            }
+        )
+
+    def health_payload(self) -> Dict[str, Any]:
+        return {
+            "healing": {
+                "heal_count": self.heal_count,
+                "errors_count": self.errors_count,
+                "last_error": self.last_error,
+                "replayed_events": len(self.events),
+            }
+        }
+
+
+service_manager = SelfHealingLogistics(SAMPLE_SEGMENTS)
 
 MANIFEST_JSON = {
     "name": "Логистика перевозок",
@@ -29,15 +116,9 @@ self.addEventListener('fetch', () => {});
 
 STYLE = """
 :root {
-  --bg: #0b1020;
-  --surface: rgba(255,255,255,.08);
-  --surface-strong: rgba(255,255,255,.14);
-  --text: #f5f7ff;
-  --muted: #b8c4ea;
-  --primary: #4f7cff;
-  --primary-2: #58d6ff;
-  --danger: #fb7185;
-  --line: rgba(255,255,255,.16);
+  --bg: #0b1020; --surface: rgba(255,255,255,.08); --surface-strong: rgba(255,255,255,.14);
+  --text: #f5f7ff; --muted: #b8c4ea; --primary: #4f7cff; --primary-2: #58d6ff;
+  --danger: #fb7185; --line: rgba(255,255,255,.16);
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; background: radial-gradient(circle at 0% 0%, #1d2a52, #0b1020 50%); color: var(--text); }
@@ -91,43 +172,21 @@ button.ghost { background: rgba(255,255,255,.08); border: 1px solid var(--line);
 
 CLIENT_JS = """
 const state = { routes: [], bookings: [], parcels: [], recentSearches: JSON.parse(localStorage.getItem('recent-searches') || '[]') };
-
 const el = {
-  routes: document.getElementById('routes-body'),
-  status: document.getElementById('status'),
-  timeline: document.getElementById('timeline'),
-  departures: document.getElementById('departures-list'),
-  recents: document.getElementById('recent-searches'),
-  favorites: document.getElementById('favorite-routes'),
-  metrics: {
-    routes: document.getElementById('m-routes'),
-    seats: document.getElementById('m-seats'),
-    bookings: document.getElementById('m-bookings'),
-    parcels: document.getElementById('m-parcels'),
-  },
-  filterCity: document.getElementById('filter-city'),
-  filterDriver: document.getElementById('filter-driver'),
-  departuresCity: document.getElementById('departures-city'),
+  routes: document.getElementById('routes-body'), status: document.getElementById('status'),
+  timeline: document.getElementById('timeline'), departures: document.getElementById('departures-list'),
+  recents: document.getElementById('recent-searches'), favorites: document.getElementById('favorite-routes'),
+  healing: document.getElementById('healing-state'),
+  metrics: { routes: document.getElementById('m-routes'), seats: document.getElementById('m-seats'), bookings: document.getElementById('m-bookings'), parcels: document.getElementById('m-parcels') },
+  filterCity: document.getElementById('filter-city'), filterDriver: document.getElementById('filter-driver'), departuresCity: document.getElementById('departures-city')
 };
 
 const tabs = document.querySelectorAll('.tab-btn');
 const panels = document.querySelectorAll('.panel');
+for (const btn of tabs) { btn.addEventListener('click', () => { tabs.forEach(x => x.classList.remove('active')); panels.forEach(x => x.classList.remove('active')); btn.classList.add('active'); document.getElementById(btn.dataset.target).classList.add('active'); }); }
 
-tabs.forEach(btn => btn.addEventListener('click', () => {
-  tabs.forEach(x => x.classList.remove('active'));
-  panels.forEach(x => x.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById(btn.dataset.target).classList.add('active');
-}));
-
-function setStatus(msg, isError = false) {
-  el.status.textContent = msg;
-  el.status.classList.toggle('error', isError);
-}
-
-function routeRow(route) {
-  return `<tr><td>${route.route_id}</td><td>${route.departure_city} → ${route.arrival_city}</td><td>${route.departure_time} - ${route.arrival_time}</td><td>${route.driver_name}</td><td>${route.available_seats}</td></tr>`;
-}
+function setStatus(msg, isError = false) { el.status.textContent = msg; el.status.classList.toggle('error', isError); }
+function routeRow(route) { return `<tr><td>${route.route_id}</td><td>${route.departure_city} → ${route.arrival_city}</td><td>${route.departure_time} - ${route.arrival_time}</td><td>${route.driver_name}</td><td>${route.available_seats}</td></tr>`; }
 
 function saveRecent(entry) {
   const compact = `${entry.from}→${entry.to} (${entry.time || 'любой'})`;
@@ -137,21 +196,14 @@ function saveRecent(entry) {
 }
 
 function renderRecents() {
-  el.recents.innerHTML = state.recentSearches.length
-    ? state.recentSearches.map(x => `<div class='item'>${x}</div>`).join('')
-    : "<div class='item'>История поиска пока пуста</div>";
+  el.recents.innerHTML = state.recentSearches.length ? state.recentSearches.map(x => `<div class='item'>${x}</div>`).join('') : "<div class='item'>История поиска пока пуста</div>";
 }
 
 function renderFavorites() {
   const grouped = {};
-  state.routes.forEach(r => {
-    const key = `${r.departure_city} → ${r.arrival_city}`;
-    grouped[key] = (grouped[key] || 0) + 1;
-  });
-  const top = Object.entries(grouped).sort((a,b) => b[1]-a[1]).slice(0, 5);
-  el.favorites.innerHTML = top.length
-    ? top.map(([name,count]) => `<div class='item'>${name} <span class='muted'>• рейсов: ${count}</span></div>`).join('')
-    : "<div class='item'>Нет данных</div>";
+  state.routes.forEach(r => { const k = `${r.departure_city} → ${r.arrival_city}`; grouped[k] = (grouped[k] || 0) + 1; });
+  const top = Object.entries(grouped).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  el.favorites.innerHTML = top.length ? top.map(([name, count]) => `<div class='item'>${name} <span class='muted'>• рейсов: ${count}</span></div>`).join('') : "<div class='item'>Нет данных</div>";
 }
 
 function renderRoutes() {
@@ -163,47 +215,39 @@ function renderRoutes() {
     return cityOk && driverOk;
   });
   el.routes.innerHTML = filtered.map(routeRow).join('') || '<tr><td colspan="5">Ничего не найдено</td></tr>';
-
-  const freeSeats = state.routes.reduce((acc, r) => acc + r.available_seats, 0);
   el.metrics.routes.textContent = state.routes.length;
-  el.metrics.seats.textContent = freeSeats;
+  el.metrics.seats.textContent = state.routes.reduce((acc, r) => acc + r.available_seats, 0);
   el.metrics.bookings.textContent = state.bookings.length;
   el.metrics.parcels.textContent = state.parcels.length;
 }
 
 async function api(path, payload) {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(payload),
-  });
+  const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   return await res.json();
 }
 
 async function refresh() {
-  const res = await fetch('/api/state');
-  const data = await res.json();
+  const stateRes = await fetch('/api/state');
+  const data = await stateRes.json();
   state.routes = data.routes;
   state.bookings = data.bookings;
   state.parcels = data.parcels;
   renderRoutes();
   renderFavorites();
+
+  const healthRes = await fetch('/api/health');
+  const health = await healthRes.json();
+  el.healing.textContent = `Автовосстановление: ${health.healing.heal_count}, ошибок: ${health.healing.errors_count}`;
 }
 
 function buildTimeline(segments) {
-  if (!segments.length) {
-    el.timeline.innerHTML = "<div class='item'>Маршрут не найден</div>";
-    return;
-  }
-  let html = "";
+  if (!segments.length) { el.timeline.innerHTML = "<div class='item'>Маршрут не найден</div>"; return; }
+  let html = '';
   for (let i = 0; i < segments.length; i++) {
     const s = segments[i];
     html += `<div class='step'><b>${s.departure_city} (${s.departure_time}) → ${s.arrival_city} (${s.arrival_time})</b><div class='muted'>Рейс ${s.route_id}, водитель ${s.driver_name}</div>`;
-    if (i < segments.length - 1) {
-      const wait = segments[i + 1].wait_minutes;
-      html += `<div class='muted'>Пересадка: ${wait} мин</div>`;
-    }
-    html += "</div>";
+    if (i < segments.length - 1) html += `<div class='muted'>Пересадка: ${segments[i].wait_minutes} мин</div>`;
+    html += '</div>';
   }
   el.timeline.innerHTML = html;
 }
@@ -211,108 +255,55 @@ function buildTimeline(segments) {
 async function loadDepartures() {
   const city = el.departuresCity.value.trim();
   const result = await api('/api/departures', { city, limit: 8 });
-  if (!result.ok) {
-    setStatus(`Ошибка: ${result.error}`, true);
-    return;
-  }
-  el.departures.innerHTML = result.departures.length
-    ? result.departures.map(d => `<div class='item'><b>${d.departure_time}</b> · ${d.departure_city} → ${d.arrival_city}<br><span class='muted'>${d.driver_name}, мест: ${d.available_seats}</span></div>`).join('')
-    : "<div class='item'>Нет отправлений</div>";
-  setStatus(`Табло обновлено для города: ${city || 'все'}`);
+  if (!result.ok) { setStatus(`Ошибка: ${result.error}`, true); return; }
+  el.departures.innerHTML = result.departures.length ? result.departures.map(d => `<div class='item'><b>${d.departure_time}</b> · ${d.departure_city} → ${d.arrival_city}<br><span class='muted'>${d.driver_name}, мест: ${d.available_seats}</span></div>`).join('') : "<div class='item'>Нет отправлений</div>";
 }
 
 function bindSubmit(id, handler) {
   document.getElementById(id).addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    try {
-      await handler(fd);
-      await refresh();
-    } catch (err) {
-      setStatus(`Ошибка: ${err.message}`, true);
-    }
+    try { await handler(fd); await refresh(); } catch (err) { setStatus(`Ошибка: ${err.message}`, true); }
   });
 }
 
 bindSubmit('route-form', async (fd) => {
-  const payload = {
-    departure_city: fd.get('departure_city'),
-    arrival_city: fd.get('arrival_city'),
-    earliest_departure: fd.get('earliest_departure') || null,
-  };
+  const payload = { departure_city: fd.get('departure_city'), arrival_city: fd.get('arrival_city'), earliest_departure: fd.get('earliest_departure') || null };
   const result = await api('/api/navigation-guide', payload);
   if (!result.ok) throw new Error(result.error);
   buildTimeline(result.guide.segments);
   saveRecent({ from: payload.departure_city, to: payload.arrival_city, time: payload.earliest_departure });
-  setStatus(`Навигация построена: ${result.guide.total_duration_minutes} мин, пересадок ${result.guide.transfers_count}`);
+  setStatus(`Навигация построена: ${result.guide.total_duration_minutes} мин`);
 });
 
-bindSubmit('driver-form', async (fd) => {
-  el.filterDriver.value = fd.get('driver_name');
-  renderRoutes();
-  setStatus('Фильтр по водителю применён');
-});
-
-bindSubmit('city-form', async (fd) => {
-  el.filterCity.value = fd.get('city');
-  renderRoutes();
-  setStatus('Фильтр по городу применён');
-});
-
+bindSubmit('driver-form', async (fd) => { el.filterDriver.value = fd.get('driver_name'); renderRoutes(); setStatus('Фильтр по водителю применён'); });
+bindSubmit('city-form', async (fd) => { el.filterCity.value = fd.get('city'); renderRoutes(); setStatus('Фильтр по городу применён'); });
 bindSubmit('booking-form', async (fd) => {
-  const result = await api('/api/book', {
-    route_id: fd.get('route_id'),
-    passenger_name: fd.get('passenger_name'),
-    seats: Number(fd.get('seats')),
-  });
+  const result = await api('/api/book', { route_id: fd.get('route_id'), passenger_name: fd.get('passenger_name'), seats: Number(fd.get('seats')) });
   if (!result.ok) throw new Error(result.error);
   setStatus(`Бронь #${result.booking.booking_id} создана`);
 });
-
 bindSubmit('parcel-form', async (fd) => {
-  const result = await api('/api/parcel', {
-    route_id: fd.get('route_id'),
-    sender_name: fd.get('sender_name'),
-    recipient_name: fd.get('recipient_name'),
-    description: fd.get('description'),
-  });
+  const result = await api('/api/parcel', { route_id: fd.get('route_id'), sender_name: fd.get('sender_name'), recipient_name: fd.get('recipient_name'), description: fd.get('description') });
   if (!result.ok) throw new Error(result.error);
   setStatus(`Передачка #${result.parcel.parcel_id} оформлена`);
 });
 
-let timer;
-for (const input of [el.filterCity, el.filterDriver]) {
-  input.addEventListener('input', () => {
-    clearTimeout(timer);
-    timer = setTimeout(renderRoutes, 70);
-  });
-}
+document.getElementById('departures-refresh').addEventListener('click', loadDepartures);
+document.getElementById('heal-now').addEventListener('click', async () => { await api('/api/heal', {reason: 'manual'}); setStatus('Система самовосстановления запущена вручную'); await refresh(); });
+document.getElementById('reset-filters').addEventListener('click', () => { el.filterCity.value = ''; el.filterDriver.value = ''; renderRoutes(); });
 
 for (const chip of document.querySelectorAll('.chip')) {
-  chip.addEventListener('click', () => {
-    const city = chip.dataset.city;
-    el.filterCity.value = city;
-    el.departuresCity.value = city;
-    renderRoutes();
-    loadDepartures();
-  });
+  chip.addEventListener('click', () => { const city = chip.dataset.city; el.filterCity.value = city; el.departuresCity.value = city; renderRoutes(); loadDepartures(); });
 }
 
-document.getElementById('departures-refresh').addEventListener('click', loadDepartures);
-document.getElementById('reset-filters').addEventListener('click', () => {
-  el.filterCity.value = '';
-  el.filterDriver.value = '';
-  renderRoutes();
-  setStatus('Фильтры очищены');
-});
-
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/service-worker.js').catch(() => null);
+let timer;
+for (const input of [el.filterCity, el.filterDriver]) {
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(renderRoutes, 70); });
 }
 
-renderRecents();
-refresh();
-loadDepartures();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/service-worker.js').catch(() => null);
+renderRecents(); refresh(); loadDepartures();
 """
 
 
@@ -336,39 +327,28 @@ def build_navigation_guide(segments: List[RouteSegment]) -> Dict[str, object]:
     if not segments:
         return {"segments": [], "total_duration_minutes": 0, "transfers_count": 0}
 
-    normalized_segments: List[Dict[str, object]] = []
-    for index, segment in enumerate(segments):
-        wait_minutes = 0
-        if index < len(segments) - 1:
-            next_departure = parse_clock(segments[index + 1].departure_time)
-            arrival = parse_clock(segment.arrival_time)
-            wait_minutes = int((next_departure - arrival).total_seconds() // 60)
-
+    result: List[Dict[str, object]] = []
+    for i, segment in enumerate(segments):
         payload = segment_to_dict(segment)
-        payload["wait_minutes"] = wait_minutes
-        normalized_segments.append(payload)
+        wait = 0
+        if i < len(segments) - 1:
+            wait = int((parse_clock(segments[i + 1].departure_time) - parse_clock(segment.arrival_time)).total_seconds() // 60)
+        payload["wait_minutes"] = wait
+        result.append(payload)
 
-    trip_start = parse_clock(segments[0].departure_time)
-    trip_end = parse_clock(segments[-1].arrival_time)
-    total_duration = int((trip_end - trip_start).total_seconds() // 60)
-
-    return {
-        "segments": normalized_segments,
-        "total_duration_minutes": max(total_duration, 0),
-        "transfers_count": max(len(segments) - 1, 0),
-    }
+    total_duration = int((parse_clock(segments[-1].arrival_time) - parse_clock(segments[0].departure_time)).total_seconds() // 60)
+    return {"segments": result, "total_duration_minutes": max(total_duration, 0), "transfers_count": max(len(segments) - 1, 0)}
 
 
 def get_departures(city: str, limit: int = 8) -> List[Dict[str, object]]:
     city_normalized = city.strip().lower()
-    items = []
-    for segment in service.segments.values():
-        if city_normalized and segment.departure_city.lower() != city_normalized:
-            continue
-        items.append(segment)
 
-    items = sorted(items, key=lambda x: parse_clock(x.departure_time))[: max(limit, 1)]
-    return [segment_to_dict(item) for item in items]
+    def operation(service: LogisticsService) -> List[Dict[str, object]]:
+        rows = [s for s in service.segments.values() if not city_normalized or s.departure_city.lower() == city_normalized]
+        rows = sorted(rows, key=lambda x: parse_clock(x.departure_time))[: max(limit, 1)]
+        return [segment_to_dict(s) for s in rows]
+
+    return service_manager.run(operation, "get_departures")
 
 
 def render_page() -> str:
@@ -388,7 +368,7 @@ def render_page() -> str:
 <div class='container'>
   <section class='hero'>
     <h1>Навигационный центр перевозок</h1>
-    <p>Продвинутая навигация: смарт-маршруты с пересадками, табло отправлений, избранные направления и история поиска.</p>
+    <p>Продвинутая навигация + самовосстановление: система лечит себя при сбоях и продолжает работу.</p>
     <div class='metrics'>
       <div class='metric'>Рейсов <b id='m-routes'>0</b></div>
       <div class='metric'>Свободных мест <b id='m-seats'>0</b></div>
@@ -450,6 +430,11 @@ def render_page() -> str:
           <h2>Избранные направления</h2>
           <div id='favorite-routes' class='list'></div>
         </div>
+      </div>
+
+      <div class='split' style='margin-top:10px'>
+        <div class='item' id='healing-state'>Автовосстановление: 0, ошибок: 0</div>
+        <button id='heal-now' class='ghost' type='button'>Запустить самовосстановление</button>
       </div>
     </div>
 
@@ -516,20 +501,23 @@ class LogisticsHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _send_json(self, payload: Dict[str, object], status: int = 200) -> None:
+    def _send_json(self, payload: Dict[str, Any], status: int = 200) -> None:
         self._send(status, json.dumps(payload, ensure_ascii=False), "application/json; charset=utf-8")
 
-    def _read_json(self) -> Dict[str, object]:
+    def _read_json(self) -> Dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0"))
         raw = self.rfile.read(length).decode("utf-8")
         return json.loads(raw or "{}")
 
-    def _state_payload(self) -> Dict[str, object]:
-        return {
-            "routes": [segment_to_dict(s) for s in service.segments.values()],
-            "bookings": [vars(b) for b in service.bookings.values()],
-            "parcels": [vars(p) for p in service.parcels.values()],
-        }
+    def _state_payload(self) -> Dict[str, Any]:
+        return service_manager.run(
+            lambda service: {
+                "routes": [segment_to_dict(s) for s in service.segments.values()],
+                "bookings": [vars(b) for b in service.bookings.values()],
+                "parcels": [vars(p) for p in service.parcels.values()],
+            },
+            "state_payload",
+        )
 
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
@@ -542,6 +530,9 @@ class LogisticsHandler(BaseHTTPRequestHandler):
         if path == "/api/state":
             self._send_json(self._state_payload())
             return
+        if path == "/api/health":
+            self._send_json(service_manager.health_payload())
+            return
         self._send(200, render_page(), "text/html; charset=utf-8")
 
     def do_POST(self) -> None:  # noqa: N802
@@ -550,20 +541,32 @@ class LogisticsHandler(BaseHTTPRequestHandler):
         try:
             if path.startswith("/api/"):
                 data = self._read_json()
+
+                if path == "/api/heal":
+                    service_manager.heal(str(data.get("reason", "manual")))
+                    self._send_json({"ok": True, **service_manager.health_payload()})
+                    return
+
                 if path == "/api/navigation-guide":
-                    route = service.find_route_sequence(
-                        str(data.get("departure_city", "")),
-                        str(data.get("arrival_city", "")),
-                        str(data.get("earliest_departure", "") or "") or None,
+                    route = service_manager.run(
+                        lambda service: service.find_route_sequence(
+                            str(data.get("departure_city", "")),
+                            str(data.get("arrival_city", "")),
+                            str(data.get("earliest_departure", "") or "") or None,
+                        ),
+                        "navigation_guide",
                     )
                     self._send_json({"ok": True, "guide": build_navigation_guide(route)})
                     return
 
                 if path == "/api/find-route":
-                    route = service.find_route_sequence(
-                        str(data.get("departure_city", "")),
-                        str(data.get("arrival_city", "")),
-                        str(data.get("earliest_departure", "") or "") or None,
+                    route = service_manager.run(
+                        lambda service: service.find_route_sequence(
+                            str(data.get("departure_city", "")),
+                            str(data.get("arrival_city", "")),
+                            str(data.get("earliest_departure", "") or "") or None,
+                        ),
+                        "find_route",
                     )
                     self._send_json({"ok": True, "routes": [segment_to_dict(item) for item in route]})
                     return
@@ -574,21 +577,29 @@ class LogisticsHandler(BaseHTTPRequestHandler):
                     return
 
                 if path == "/api/book":
-                    booking = service.book_seats(
-                        str(data.get("route_id", "")),
-                        str(data.get("passenger_name", "")),
-                        int(data.get("seats", 0)),
+                    booking = service_manager.run(
+                        lambda service: service.book_seats(
+                            str(data.get("route_id", "")),
+                            str(data.get("passenger_name", "")),
+                            int(data.get("seats", 0)),
+                        ),
+                        "book",
                     )
+                    service_manager.record_booking(booking)
                     self._send_json({"ok": True, "booking": vars(booking)})
                     return
 
                 if path == "/api/parcel":
-                    parcel = service.register_parcel(
-                        str(data.get("route_id", "")),
-                        str(data.get("sender_name", "")),
-                        str(data.get("recipient_name", "")),
-                        str(data.get("description", "")),
+                    parcel = service_manager.run(
+                        lambda service: service.register_parcel(
+                            str(data.get("route_id", "")),
+                            str(data.get("sender_name", "")),
+                            str(data.get("recipient_name", "")),
+                            str(data.get("description", "")),
+                        ),
+                        "parcel",
                     )
+                    service_manager.record_parcel(parcel)
                     self._send_json({"ok": True, "parcel": vars(parcel)})
                     return
 
@@ -599,20 +610,27 @@ class LogisticsHandler(BaseHTTPRequestHandler):
             raw = self.rfile.read(length).decode("utf-8")
             data = {k: v[0] for k, v in parse_qs(raw).items()}
             action = data.get("action", "")
-
             if action == "book":
-                service.book_seats(data.get("route_id", ""), data.get("passenger_name", ""), int(data.get("seats", "0")))
-            if action == "parcel":
-                service.register_parcel(
-                    data.get("route_id", ""),
-                    data.get("sender_name", ""),
-                    data.get("recipient_name", ""),
-                    data.get("description", ""),
+                booking = service_manager.run(
+                    lambda service: service.book_seats(data.get("route_id", ""), data.get("passenger_name", ""), int(data.get("seats", "0"))),
+                    "legacy_book",
                 )
+                service_manager.record_booking(booking)
+            if action == "parcel":
+                parcel = service_manager.run(
+                    lambda service: service.register_parcel(
+                        data.get("route_id", ""),
+                        data.get("sender_name", ""),
+                        data.get("recipient_name", ""),
+                        data.get("description", ""),
+                    ),
+                    "legacy_parcel",
+                )
+                service_manager.record_parcel(parcel)
             self._send(200, render_page(), "text/html; charset=utf-8")
         except (ValueError, json.JSONDecodeError) as exc:
             if path.startswith("/api/"):
-                self._send_json({"ok": False, "error": str(exc)}, status=400)
+                self._send_json({"ok": False, "error": str(exc), **service_manager.health_payload()}, status=400)
                 return
             self._send(400, f"Ошибка: {exc}", "text/plain; charset=utf-8")
 

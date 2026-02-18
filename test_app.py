@@ -10,6 +10,7 @@ class AppRenderingTests(unittest.TestCase):
         self.assertIn("tab-guide", page)
         self.assertIn("departures-refresh", page)
         self.assertIn("recent-searches", page)
+        self.assertIn("heal-now", page)
 
     def test_manifest_data_is_pwa_ready(self):
         self.assertEqual(app.MANIFEST_JSON["display"], "standalone")
@@ -17,13 +18,13 @@ class AppRenderingTests(unittest.TestCase):
         self.assertIn("Логистика", app.MANIFEST_JSON["short_name"])
 
     def test_segment_to_dict(self):
-        seg = app.service.segments["R1"]
+        seg = app.service_manager.service.segments["R1"]
         payload = app.segment_to_dict(seg)
         self.assertEqual(payload["route_id"], "R1")
         self.assertIn("available_seats", payload)
 
     def test_build_navigation_guide(self):
-        route = [app.service.segments["R1"], app.service.segments["R2"]]
+        route = [app.service_manager.service.segments["R1"], app.service_manager.service.segments["R2"]]
         guide = app.build_navigation_guide(route)
         self.assertEqual(guide["transfers_count"], 1)
         self.assertEqual(guide["total_duration_minutes"], 450)
@@ -32,6 +33,14 @@ class AppRenderingTests(unittest.TestCase):
     def test_get_departures_filtered(self):
         dep = app.get_departures("Алматы", 5)
         self.assertEqual([d["route_id"] for d in dep], ["R1", "R3"])
+
+    def test_self_healing_manager_manual_heal(self):
+        manager = app.SelfHealingLogistics(app.SAMPLE_SEGMENTS)
+        booking = manager.run(lambda svc: svc.book_seats("R1", "Тест", 2), "book")
+        manager.record_booking(booking)
+        manager.heal("manual")
+        self.assertEqual(manager.heal_count, 1)
+        self.assertEqual(manager.service.segments["R1"].available_seats, 18)
 
 
 if __name__ == "__main__":
