@@ -1,259 +1,463 @@
 from __future__ import annotations
 
-from html import escape
+import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Dict, List
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlparse
 
 from logistics import LogisticsService, RouteSegment, SAMPLE_SEGMENTS
 
 service = LogisticsService(SAMPLE_SEGMENTS)
 
-MANIFEST_JSON = """{
-  \"name\": \"Логистика перевозок\",
-  \"short_name\": \"Логистика\",
-  \"start_url\": \"/\",
-  \"display\": \"standalone\",
-  \"background_color\": \"#f4f7fb\",
-  \"theme_color\": \"#2e6ee6\",
-  \"description\": \"Маршруты, бронирования и передачки для водителей и пассажиров\",
-  \"icons\": []
-}"""
+MANIFEST_JSON = {
+    "name": "Логистика перевозок",
+    "short_name": "Логистика",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#0b1020",
+    "theme_color": "#4f7cff",
+    "description": "Маршруты, бронирования и передачки для водителей и пассажиров",
+    "icons": [],
+}
 
 SERVICE_WORKER_JS = """
-self.addEventListener('install', event => {
-  event.waitUntil(self.skipWaiting());
-});
-
-self.addEventListener('activate', event => {
-  event.waitUntil(self.clients.claim());
-});
-
-self.addEventListener('fetch', () => {
-  // Network-first strategy for this lightweight app.
-});
+self.addEventListener('install', event => event.waitUntil(self.skipWaiting()));
+self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
+self.addEventListener('fetch', () => {});
 """
 
 STYLE = """
 :root {
-  color-scheme: light;
-  --bg: #f4f7fb;
-  --surface: #ffffff;
-  --primary: #2e6ee6;
-  --primary-dark: #205bd0;
-  --text: #1b2a41;
-  --muted: #566885;
+  --bg: #0b1020;
+  --bg-soft: #131a30;
+  --surface: rgba(255,255,255,0.08);
+  --surface-strong: rgba(255,255,255,0.12);
+  --text: #f5f7ff;
+  --muted: #b6c1e3;
+  --primary: #4f7cff;
+  --primary-2: #58d6ff;
+  --ok: #22c55e;
+  --err: #f87171;
+  --shadow: 0 18px 40px rgba(0,0,0,0.35);
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; font-family: Inter, Arial, sans-serif; background: var(--bg); color: var(--text); }
-body { padding-bottom: 72px; }
-header { background: linear-gradient(135deg, var(--primary), #5a8bf0); color: #fff; padding: 18px 16px; }
-header h1 { margin: 0; font-size: 22px; }
-header p { margin: 6px 0 0; font-size: 14px; opacity: 0.95; }
-.container { max-width: 1200px; margin: 14px auto; padding: 0 12px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
-.card { background: var(--surface); border-radius: 14px; padding: 14px; box-shadow: 0 4px 14px rgba(33, 70, 139, 0.1); }
-h2 { margin-top: 0; font-size: 17px; }
-label { display: block; margin: 8px 0 4px; font-size: 14px; }
-input { width: 100%; padding: 10px; border: 1px solid #cfd8ea; border-radius: 10px; font-size: 16px; }
-button { margin-top: 10px; width: 100%; padding: 12px; border: 0; border-radius: 10px; background: var(--primary); color: #fff; font-size: 15px; font-weight: 600; }
-button:hover { background: var(--primary-dark); }
-.notice { margin: 10px 0; padding: 10px 12px; border-radius: 10px; background: #e8f1ff; color: #214d96; }
-.error { background: #ffeaea; color: #902323; }
-.table-wrap { overflow-x: auto; }
-.table { width: 100%; border-collapse: collapse; min-width: 640px; font-size: 14px; }
-.table th, .table td { border-bottom: 1px solid #e4e8f2; text-align: left; padding: 8px; }
-.small { font-size: 12px; color: var(--muted); }
-.mobile-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #d9e2f2; display: none; gap: 6px; padding: 8px; }
-.mobile-nav a { flex: 1; text-align: center; font-size: 12px; text-decoration: none; color: var(--text); background: #f3f6fc; padding: 8px 6px; border-radius: 8px; }
-@media (max-width: 820px) {
-  .grid { grid-template-columns: 1fr; }
-  .card { padding: 12px; }
+html, body { margin: 0; padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; background: radial-gradient(circle at 0% 0%, #1d2a52, var(--bg) 45%); color: var(--text); }
+body { min-height: 100vh; }
+.container { max-width: 1250px; margin: 0 auto; padding: 18px 14px 80px; }
+.hero { padding: 22px; border-radius: 20px; background: linear-gradient(140deg, rgba(79,124,255,.32), rgba(88,214,255,.15)); box-shadow: var(--shadow); border: 1px solid rgba(255,255,255,.12); }
+.hero h1 { margin: 0; font-size: clamp(24px, 5vw, 38px); }
+.hero p { color: var(--muted); margin: 10px 0 0; }
+.metrics { margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.metric { background: var(--surface); border: 1px solid rgba(255,255,255,.12); border-radius: 14px; padding: 10px; }
+.metric b { display: block; font-size: 24px; margin-top: 4px; }
+.layout { margin-top: 14px; display: grid; grid-template-columns: 1.1fr .9fr; gap: 12px; }
+.card { background: var(--surface); border: 1px solid rgba(255,255,255,.11); border-radius: 16px; padding: 14px; backdrop-filter: blur(8px); }
+.card h2 { margin: 0 0 12px; font-size: 18px; }
+.table-wrap { max-height: 420px; overflow: auto; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; }
+.table { width: 100%; border-collapse: collapse; min-width: 600px; font-size: 14px; }
+.table th, .table td { border-bottom: 1px solid rgba(255,255,255,.08); padding: 8px; text-align: left; }
+.table th { position: sticky; top: 0; background: #111932; z-index: 2; }
+.controls { display: flex; gap: 8px; margin-bottom: 10px; }
+.input, select, button { width: 100%; border-radius: 10px; border: 1px solid rgba(255,255,255,.15); padding: 11px 12px; font-size: 15px; color: var(--text); background: rgba(0,0,0,.2); }
+.input::placeholder { color: #9dadde; }
+button { cursor: pointer; border: none; background: linear-gradient(120deg, var(--primary), var(--primary-2)); color: #fff; font-weight: 700; }
+button.ghost { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2); }
+.forms { display: grid; gap: 10px; }
+.form { display: grid; gap: 8px; padding: 12px; background: rgba(0,0,0,.2); border-radius: 12px; border: 1px solid rgba(255,255,255,.09); }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.status { margin-top: 10px; padding: 10px; border-radius: 10px; background: rgba(79,124,255,.22); border: 1px solid rgba(79,124,255,.45); }
+.status.error { background: rgba(248,113,113,.15); border-color: rgba(248,113,113,.5); }
+.list { display: grid; gap: 8px; margin-top: 10px; }
+.item { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); border-radius: 10px; padding: 8px; font-size: 13px; }
+.mobile-nav { display: none; position: fixed; left: 10px; right: 10px; bottom: 10px; background: rgba(16,24,44,.92); border: 1px solid rgba(255,255,255,.16); border-radius: 12px; padding: 6px; gap: 6px; }
+.mobile-nav a { flex: 1; text-decoration: none; text-align: center; color: var(--text); font-size: 12px; padding: 8px 4px; border-radius: 8px; background: rgba(255,255,255,.08); }
+@media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  .container { padding: 12px 10px 88px; }
+  .form-grid { grid-template-columns: 1fr; }
+  .table { min-width: 520px; }
   .mobile-nav { display: flex; }
 }
 """
 
+CLIENT_JS = """
+const state = {
+  routes: [],
+  bookings: [],
+  parcels: [],
+};
 
-def render_routes(routes: List[RouteSegment]) -> str:
-    if not routes:
-        return "<p class='small'>Нет найденных рейсов.</p>"
+const el = {
+  routes: document.getElementById('routes-body'),
+  status: document.getElementById('status'),
+  bookings: document.getElementById('booking-list'),
+  parcels: document.getElementById('parcel-list'),
+  metrics: {
+    routes: document.getElementById('m-routes'),
+    seats: document.getElementById('m-seats'),
+    bookings: document.getElementById('m-bookings'),
+    parcels: document.getElementById('m-parcels'),
+  },
+  filterCity: document.getElementById('filter-city'),
+  filterDriver: document.getElementById('filter-driver'),
+};
 
-    rows = "".join(
-        f"<tr><td>{escape(s.route_id)}</td><td>{escape(s.departure_city)} → {escape(s.arrival_city)}</td>"
-        f"<td>{escape(s.departure_time)} - {escape(s.arrival_time)}</td><td>{escape(s.driver_name)}</td>"
-        f"<td>{s.available_seats}</td></tr>"
-        for s in routes
-    )
-    return (
-        "<div class='table-wrap'><table class='table'><thead><tr><th>ID</th><th>Маршрут</th><th>Время</th><th>Водитель</th><th>Свободно мест</th>"
-        f"</tr></thead><tbody>{rows}</tbody></table></div>"
-    )
+function renderStatus(text, isError = false) {
+  el.status.textContent = text;
+  el.status.classList.toggle('error', isError);
+}
+
+function routeRow(route) {
+  return `<tr>
+    <td>${route.route_id}</td>
+    <td>${route.departure_city} → ${route.arrival_city}</td>
+    <td>${route.departure_time} - ${route.arrival_time}</td>
+    <td>${route.driver_name}</td>
+    <td>${route.available_seats}</td>
+  </tr>`;
+}
+
+function renderRoutes() {
+  const city = el.filterCity.value.trim().toLowerCase();
+  const driver = el.filterDriver.value.trim().toLowerCase();
+  const filtered = state.routes.filter(r => {
+    const cityOk = !city || r.departure_city.toLowerCase().includes(city) || r.arrival_city.toLowerCase().includes(city);
+    const driverOk = !driver || r.driver_name.toLowerCase().includes(driver);
+    return cityOk && driverOk;
+  });
+  el.routes.innerHTML = filtered.map(routeRow).join('') || '<tr><td colspan="5">Ничего не найдено</td></tr>';
+
+  const freeSeats = state.routes.reduce((acc, r) => acc + r.available_seats, 0);
+  el.metrics.routes.textContent = state.routes.length;
+  el.metrics.seats.textContent = freeSeats;
+  el.metrics.bookings.textContent = state.bookings.length;
+  el.metrics.parcels.textContent = state.parcels.length;
+}
+
+function renderItems() {
+  el.bookings.innerHTML = state.bookings.length
+    ? state.bookings.slice(-5).reverse().map(b => `<div class='item'>Бронь #${b.booking_id}: ${b.passenger_name}, рейс ${b.route_id}, мест ${b.seats}</div>`).join('')
+    : '<div class="item">Пока нет бронирований</div>';
+
+  el.parcels.innerHTML = state.parcels.length
+    ? state.parcels.slice(-5).reverse().map(p => `<div class='item'>Передачка #${p.parcel_id}: ${p.sender_name} → ${p.recipient_name}, рейс ${p.route_id}</div>`).join('')
+    : '<div class="item">Пока нет передачек</div>';
+}
+
+async function api(path, payload) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  });
+  return await res.json();
+}
+
+async function refresh() {
+  const res = await fetch('/api/state');
+  const data = await res.json();
+  state.routes = data.routes;
+  state.bookings = data.bookings;
+  state.parcels = data.parcels;
+  renderRoutes();
+  renderItems();
+}
+
+function bindForm(id, handler) {
+  document.getElementById(id).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    try {
+      await handler(fd);
+      await refresh();
+    } catch (err) {
+      renderStatus(`Ошибка: ${err.message}`, true);
+    }
+  });
+}
+
+bindForm('route-form', async (fd) => {
+  const result = await api('/api/find-route', {
+    departure_city: fd.get('departure_city'),
+    arrival_city: fd.get('arrival_city'),
+    earliest_departure: fd.get('earliest_departure') || null,
+  });
+  if (!result.ok) throw new Error(result.error);
+  const ids = result.routes.map(r => r.route_id).join(' → ') || 'маршрут не найден';
+  renderStatus(`Построено: ${ids}`);
+});
+
+bindForm('driver-form', async (fd) => {
+  el.filterDriver.value = fd.get('driver_name');
+  renderRoutes();
+  renderStatus('Фильтр по водителю применён');
+});
+
+bindForm('city-form', async (fd) => {
+  el.filterCity.value = fd.get('city');
+  renderRoutes();
+  renderStatus('Фильтр по городу применён');
+});
+
+bindForm('booking-form', async (fd) => {
+  const result = await api('/api/book', {
+    route_id: fd.get('route_id'),
+    passenger_name: fd.get('passenger_name'),
+    seats: Number(fd.get('seats')),
+  });
+  if (!result.ok) throw new Error(result.error);
+  renderStatus(`Бронь #${result.booking.booking_id} создана`);
+});
+
+bindForm('parcel-form', async (fd) => {
+  const result = await api('/api/parcel', {
+    route_id: fd.get('route_id'),
+    sender_name: fd.get('sender_name'),
+    recipient_name: fd.get('recipient_name'),
+    description: fd.get('description'),
+  });
+  if (!result.ok) throw new Error(result.error);
+  renderStatus(`Передачка #${result.parcel.parcel_id} оформлена`);
+});
+
+let timer;
+for (const input of [el.filterCity, el.filterDriver]) {
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(renderRoutes, 80);
+  });
+}
+
+document.getElementById('reset-filters').addEventListener('click', () => {
+  el.filterCity.value = '';
+  el.filterDriver.value = '';
+  renderRoutes();
+  renderStatus('Фильтры очищены');
+});
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/service-worker.js').catch(() => null);
+}
+
+refresh();
+"""
 
 
-def render_page(message: str = "", error: bool = False, results_html: str = "") -> str:
-    msg_block = f"<div class='notice {'error' if error else ''}'>{escape(message)}</div>" if message else ""
-    all_routes = render_routes(list(service.segments.values()))
+def segment_to_dict(segment: RouteSegment) -> Dict[str, object]:
+    return {
+        "route_id": segment.route_id,
+        "departure_city": segment.departure_city,
+        "arrival_city": segment.arrival_city,
+        "departure_time": segment.departure_time,
+        "arrival_time": segment.arrival_time,
+        "driver_name": segment.driver_name,
+        "available_seats": segment.available_seats,
+    }
+
+
+def render_page() -> str:
     return f"""<!doctype html>
 <html lang='ru'>
 <head>
   <meta charset='utf-8'>
   <meta name='viewport' content='width=device-width, initial-scale=1, viewport-fit=cover'>
-  <meta name='theme-color' content='#2e6ee6'>
+  <meta name='theme-color' content='#4f7cff'>
   <meta name='apple-mobile-web-app-capable' content='yes'>
-  <meta name='apple-mobile-web-app-status-bar-style' content='default'>
   <meta name='apple-mobile-web-app-title' content='Логистика'>
   <link rel='manifest' href='/manifest.webmanifest'>
   <title>Логистика перевозок</title>
   <style>{STYLE}</style>
 </head>
 <body>
-<header>
-  <h1>Логистика перевозок</h1>
-  <p>Мобильная версия для iOS и Android: маршруты, расписание, бронь и передачки.</p>
-</header>
 <div class='container'>
-  {msg_block}
+  <section class='hero'>
+    <h1>Премиум-диспетчерская перевозок</h1>
+    <p>Красивый интерфейс + моментальный отклик: всё работает без перезагрузки страницы.</p>
+    <div class='metrics'>
+      <div class='metric'>Рейсов <b id='m-routes'>0</b></div>
+      <div class='metric'>Свободных мест <b id='m-seats'>0</b></div>
+      <div class='metric'>Бронирований <b id='m-bookings'>0</b></div>
+      <div class='metric'>Передачек <b id='m-parcels'>0</b></div>
+    </div>
+  </section>
 
-  <div id='routes' class='card'><h2>Доступные рейсы</h2>{all_routes}</div>
+  <section class='layout'>
+    <div id='dashboard' class='card'>
+      <h2>Рейсы в реальном времени</h2>
+      <div class='controls'>
+        <input id='filter-city' class='input' placeholder='Фильтр по городу'>
+        <input id='filter-driver' class='input' placeholder='Фильтр по водителю'>
+        <button id='reset-filters' type='button' class='ghost'>Сбросить</button>
+      </div>
+      <div class='table-wrap'>
+        <table class='table'>
+          <thead><tr><th>ID</th><th>Маршрут</th><th>Время</th><th>Водитель</th><th>Мест</th></tr></thead>
+          <tbody id='routes-body'><tr><td colspan='5'>Загрузка...</td></tr></tbody>
+        </table>
+      </div>
+      <div id='status' class='status'>Готово к работе</div>
+      <div class='form-grid' style='margin-top:10px'>
+        <div>
+          <h2>Последние брони</h2>
+          <div id='booking-list' class='list'></div>
+        </div>
+        <div>
+          <h2>Последние передачки</h2>
+          <div id='parcel-list' class='list'></div>
+        </div>
+      </div>
+    </div>
 
-  <div class='grid'>
-    <form id='route' class='card' method='post'>
-      <h2>Построить маршрут</h2>
-      <input type='hidden' name='action' value='find_route'>
-      <label>Откуда</label><input name='departure_city' required>
-      <label>Куда</label><input name='arrival_city' required>
-      <label>Не раньше (HH:MM)</label><input name='earliest_departure' placeholder='08:00'>
-      <button type='submit'>Найти путь</button>
-    </form>
+    <div id='actions' class='card'>
+      <h2>Операции</h2>
+      <div class='forms'>
+        <form id='route-form' class='form'>
+          <b>Построить маршрут</b>
+          <input name='departure_city' class='input' placeholder='Откуда' required>
+          <input name='arrival_city' class='input' placeholder='Куда' required>
+          <input name='earliest_departure' class='input' placeholder='Не раньше (HH:MM)'>
+          <button>Построить</button>
+        </form>
 
-    <form id='driver' class='card' method='post'>
-      <h2>Водитель</h2>
-      <input type='hidden' name='action' value='driver_schedule'>
-      <label>Имя водителя</label><input name='driver_name' required>
-      <button type='submit'>Показать расписание</button>
-    </form>
+        <form id='driver-form' class='form'>
+          <b>Показать рейсы водителя</b>
+          <input name='driver_name' class='input' placeholder='Имя водителя' required>
+          <button>Применить</button>
+        </form>
 
-    <form id='passenger' class='card' method='post'>
-      <h2>Пассажир</h2>
-      <input type='hidden' name='action' value='city_schedule'>
-      <label>Город</label><input name='city' required>
-      <button type='submit'>Показать рейсы</button>
-    </form>
+        <form id='city-form' class='form'>
+          <b>Показать рейсы по городу</b>
+          <input name='city' class='input' placeholder='Город' required>
+          <button>Применить</button>
+        </form>
 
-    <form id='book' class='card' method='post'>
-      <h2>Бронирование</h2>
-      <input type='hidden' name='action' value='book'>
-      <label>ID маршрута</label><input name='route_id' required>
-      <label>ФИО пассажира</label><input name='passenger_name' required>
-      <label>Мест</label><input name='seats' type='number' min='1' required>
-      <button type='submit'>Забронировать</button>
-    </form>
+        <form id='booking-form' class='form'>
+          <b>Забронировать место</b>
+          <input name='route_id' class='input' placeholder='ID маршрута' required>
+          <input name='passenger_name' class='input' placeholder='ФИО пассажира' required>
+          <input name='seats' type='number' min='1' class='input' placeholder='Количество мест' required>
+          <button>Создать бронь</button>
+        </form>
 
-    <form id='parcel' class='card' method='post'>
-      <h2>Передачка</h2>
-      <input type='hidden' name='action' value='parcel'>
-      <label>ID маршрута</label><input name='route_id' required>
-      <label>Отправитель</label><input name='sender_name' required>
-      <label>Получатель</label><input name='recipient_name' required>
-      <label>Описание</label><input name='description' required>
-      <button type='submit'>Оформить</button>
-    </form>
-  </div>
-
-  <div id='result' class='card'>
-    <h2>Результат</h2>
-    {results_html or "<p class='small'>Выберите действие выше.</p>"}
-  </div>
+        <form id='parcel-form' class='form'>
+          <b>Оформить передачку</b>
+          <input name='route_id' class='input' placeholder='ID маршрута' required>
+          <input name='sender_name' class='input' placeholder='Отправитель' required>
+          <input name='recipient_name' class='input' placeholder='Получатель' required>
+          <input name='description' class='input' placeholder='Описание' required>
+          <button>Оформить</button>
+        </form>
+      </div>
+    </div>
+  </section>
 </div>
 
 <nav class='mobile-nav'>
-  <a href='#route'>Маршрут</a>
-  <a href='#driver'>Водитель</a>
-  <a href='#book'>Бронь</a>
-  <a href='#result'>Итог</a>
+  <a href='#dashboard'>Дашборд</a>
+  <a href='#actions'>Операции</a>
 </nav>
 
-<script>
-if ('serviceWorker' in navigator) {{
-  navigator.serviceWorker.register('/service-worker.js').catch(() => null);
-}}
-</script>
+<script>{CLIENT_JS}</script>
 </body>
 </html>"""
 
 
 class LogisticsHandler(BaseHTTPRequestHandler):
-    def _send_html(self, html: str) -> None:
-        body = html.encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def _send_text(self, body: str, content_type: str) -> None:
+    def _send(self, status: int, body: str, content_type: str) -> None:
         data = body.encode("utf-8")
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
 
-    def _handle_action(self, data: Dict[str, str]) -> str:
-        action = data.get("action", "")
-        if action == "find_route":
-            routes = service.find_route_sequence(
-                data.get("departure_city", ""),
-                data.get("arrival_city", ""),
-                data.get("earliest_departure") or None,
-            )
-            return render_page("Маршрут построен", results_html=render_routes(routes))
+    def _send_json(self, payload: Dict[str, object], status: int = 200) -> None:
+        self._send(status, json.dumps(payload, ensure_ascii=False), "application/json; charset=utf-8")
 
-        if action == "driver_schedule":
-            routes = service.schedule_for_driver(data.get("driver_name", ""))
-            return render_page("Расписание водителя", results_html=render_routes(routes))
-
-        if action == "city_schedule":
-            routes = service.schedule_for_passenger(data.get("city", ""))
-            return render_page("Расписание по городу", results_html=render_routes(routes))
-
-        if action == "book":
-            booking = service.book_seats(
-                data.get("route_id", ""),
-                data.get("passenger_name", ""),
-                int(data.get("seats", "0")),
-            )
-            return render_page(f"Бронь #{booking.booking_id} успешно создана")
-
-        if action == "parcel":
-            parcel = service.register_parcel(
-                data.get("route_id", ""),
-                data.get("sender_name", ""),
-                data.get("recipient_name", ""),
-                data.get("description", ""),
-            )
-            return render_page(f"Передачка #{parcel.parcel_id} успешно оформлена")
-
-        return render_page("Неизвестное действие", error=True)
-
-    def do_GET(self) -> None:  # noqa: N802
-        if self.path == "/manifest.webmanifest":
-            self._send_text(MANIFEST_JSON, "application/manifest+json; charset=utf-8")
-            return
-        if self.path == "/service-worker.js":
-            self._send_text(SERVICE_WORKER_JS, "application/javascript; charset=utf-8")
-            return
-        self._send_html(render_page())
-
-    def do_POST(self) -> None:  # noqa: N802
+    def _read_json(self) -> Dict[str, object]:
         length = int(self.headers.get("Content-Length", "0"))
         raw = self.rfile.read(length).decode("utf-8")
-        data = {k: v[0] for k, v in parse_qs(raw).items()}
+        return json.loads(raw or "{}")
+
+    def _state_payload(self) -> Dict[str, object]:
+        return {
+            "routes": [segment_to_dict(s) for s in service.segments.values()],
+            "bookings": [vars(b) for b in service.bookings.values()],
+            "parcels": [vars(p) for p in service.parcels.values()],
+        }
+
+    def do_GET(self) -> None:  # noqa: N802
+        path = urlparse(self.path).path
+        if path == "/manifest.webmanifest":
+            self._send_json(MANIFEST_JSON)
+            return
+        if path == "/service-worker.js":
+            self._send(200, SERVICE_WORKER_JS, "application/javascript; charset=utf-8")
+            return
+        if path == "/api/state":
+            self._send_json(self._state_payload())
+            return
+        self._send(200, render_page(), "text/html; charset=utf-8")
+
+    def do_POST(self) -> None:  # noqa: N802
+        path = urlparse(self.path).path
 
         try:
-            self._send_html(self._handle_action(data))
-        except ValueError as exc:
-            self._send_html(render_page(f"Ошибка: {exc}", error=True))
+            if path.startswith("/api/"):
+                data = self._read_json()
+                if path == "/api/find-route":
+                    routes = service.find_route_sequence(
+                        str(data.get("departure_city", "")),
+                        str(data.get("arrival_city", "")),
+                        str(data.get("earliest_departure", "") or "") or None,
+                    )
+                    self._send_json({"ok": True, "routes": [segment_to_dict(s) for s in routes]})
+                    return
+
+                if path == "/api/book":
+                    booking = service.book_seats(
+                        str(data.get("route_id", "")),
+                        str(data.get("passenger_name", "")),
+                        int(data.get("seats", 0)),
+                    )
+                    self._send_json({"ok": True, "booking": vars(booking)})
+                    return
+
+                if path == "/api/parcel":
+                    parcel = service.register_parcel(
+                        str(data.get("route_id", "")),
+                        str(data.get("sender_name", "")),
+                        str(data.get("recipient_name", "")),
+                        str(data.get("description", "")),
+                    )
+                    self._send_json({"ok": True, "parcel": vars(parcel)})
+                    return
+
+                self._send_json({"ok": False, "error": "Неизвестный endpoint"}, status=404)
+                return
+
+            # Backward-compatible form handler
+            length = int(self.headers.get("Content-Length", "0"))
+            raw = self.rfile.read(length).decode("utf-8")
+            data = {k: v[0] for k, v in parse_qs(raw).items()}
+            action = data.get("action", "")
+
+            if action == "book":
+                service.book_seats(data.get("route_id", ""), data.get("passenger_name", ""), int(data.get("seats", "0")))
+            if action == "parcel":
+                service.register_parcel(
+                    data.get("route_id", ""),
+                    data.get("sender_name", ""),
+                    data.get("recipient_name", ""),
+                    data.get("description", ""),
+                )
+            self._send(200, render_page(), "text/html; charset=utf-8")
+        except (ValueError, json.JSONDecodeError) as exc:
+            if path.startswith("/api/"):
+                self._send_json({"ok": False, "error": str(exc)}, status=400)
+                return
+            self._send(400, f"Ошибка: {exc}", "text/plain; charset=utf-8")
 
 
 def run() -> None:
