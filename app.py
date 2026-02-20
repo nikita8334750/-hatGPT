@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
@@ -117,6 +118,37 @@ class SelfHealingLogistics:
 
 service_manager = SelfHealingLogistics(SAMPLE_SEGMENTS)
 CONTACT_REQUESTS: List[Dict[str, str]] = []
+DATA_FILE = Path("data_store.json")
+
+
+def save_runtime_state() -> None:
+    payload = {
+        "events": service_manager.events,
+        "heal_count": service_manager.heal_count,
+        "errors_count": service_manager.errors_count,
+        "last_error": service_manager.last_error,
+        "contacts": CONTACT_REQUESTS,
+    }
+    DATA_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def load_runtime_state() -> None:
+    if not DATA_FILE.exists():
+        return
+    try:
+        payload = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+        service_manager.events = list(payload.get("events", []))
+        service_manager.heal_count = int(payload.get("heal_count", 0))
+        service_manager.errors_count = int(payload.get("errors_count", 0))
+        service_manager.last_error = str(payload.get("last_error", ""))
+        CONTACT_REQUESTS.clear()
+        CONTACT_REQUESTS.extend(payload.get("contacts", []))
+        service_manager.heal("restore_from_disk")
+    except (ValueError, json.JSONDecodeError):
+        return
+
+
+load_runtime_state()
 
 MANIFEST_JSON = {
     "name": "Логистика перевозок",
@@ -748,6 +780,30 @@ class LogisticsHandler(BaseHTTPRequestHandler):
                         lambda service: service.book_seats(
                             str(data.get("route_id", "")),
                             str(data.get("passenger_name", "")),
+        if path == "/api/docs":
+            self._send_json(
+                {
+                    "service": "Logistics Enterprise Platform",
+                    "version": "1.0",
+                    "endpoints": {
+                        "GET": ["/", "/api/state", "/api/health", "/api/analytics", "/api/docs"],
+                        "POST": [
+                            "/api/heal",
+                            "/api/navigation-guide",
+                            "/api/find-route",
+                            "/api/departures",
+                            "/api/book",
+                            "/api/parcel",
+                            "/api/booking/cancel",
+                            "/api/parcel/cancel",
+                            "/api/route/upsert",
+                            "/api/route/delete",
+                            "/api/contact",
+                        ],
+                    },
+                }
+            )
+            return
         if path == "/api/analytics":
             payload = self._state_payload()
             routes = payload["routes"]
@@ -760,11 +816,13 @@ class LogisticsHandler(BaseHTTPRequestHandler):
             conversion = int((len(bookings) / len(routes)) * 100) if routes else 0
             self._send_json({"load_factor_percent": load, "conversion_percent": conversion, "parcels_count": len(parcels)})
             return
+                    save_runtime_state()
                             int(data.get("seats", 0)),
                         ),
                         "book",
                     )
                     service_manager.record_booking(booking)
+                    save_runtime_state()
                     self._send_json({"ok": True, "booking": vars(booking)})
                     return
 
@@ -779,9 +837,15 @@ class LogisticsHandler(BaseHTTPRequestHandler):
                         "parcel",
                     )
                     service_manager.record_parcel(parcel)
+                    save_runtime_state()
                     self._send_json({"ok": True, "parcel": vars(parcel)})
                     return
 
+                    save_runtime_state()
+                    save_runtime_state()
+                    save_runtime_state()
+                    save_runtime_state()
+                    save_runtime_state()
                 self._send_json({"ok": False, "error": "Неизвестный endpoint"}, status=404)
                 return
 
@@ -795,6 +859,7 @@ class LogisticsHandler(BaseHTTPRequestHandler):
                     "legacy_book",
                 )
                 service_manager.record_booking(booking)
+                save_runtime_state()
             if action == "parcel":
                 parcel = service_manager.run(
                     lambda service: service.register_parcel(
@@ -806,6 +871,7 @@ class LogisticsHandler(BaseHTTPRequestHandler):
                     "legacy_parcel",
                 )
                 service_manager.record_parcel(parcel)
+                save_runtime_state()
             self._send(200, render_page(), "text/html; charset=utf-8")
         except (ValueError, json.JSONDecodeError) as exc:
             if path.startswith("/api/"):

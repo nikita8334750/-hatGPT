@@ -51,6 +51,7 @@ class AppRenderingTests(unittest.TestCase):
     def test_contact_request_validation(self):
         self.assertTrue("/api/contact" in app.__dict__["render_page"]())
         self.assertTrue("/api/route/upsert" in app.__dict__["LogisticsHandler"].do_POST.__code__.co_consts)
+        self.assertTrue("/api/docs" in app.__dict__["LogisticsHandler"].do_GET.__code__.co_consts)
 
 
 if __name__ == "__main__":
