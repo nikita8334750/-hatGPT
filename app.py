@@ -189,6 +189,12 @@ button.ghost { background: rgba(255,255,255,.08); border: 1px solid var(--line);
 .enterprise-card h3 { margin:0 0 6px; font-size:15px; }
 .faq details { border:1px solid var(--line); border-radius:10px; padding:10px; background: rgba(255,255,255,.05); margin-bottom:8px; }
 .footer { margin-top:14px; border:1px solid var(--line); border-radius:12px; padding:12px; color: var(--muted); font-size:13px; }
+.hero-visual { margin-top: 14px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); max-height: 260px; }
+.hero-visual img { width: 100%; height: 260px; object-fit: cover; display: block; }
+.photo-grid { margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.photo-card { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: rgba(255,255,255,.06); }
+.photo-card img { width: 100%; height: 130px; object-fit: cover; display: block; }
+.photo-card p { margin: 8px; font-size: 12px; color: var(--muted); }
 @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
 @media (max-width: 760px) {
   .container { padding: 12px 10px 88px; }
@@ -497,6 +503,27 @@ def render_page() -> str:
       <div class='metric'>Заполняемость <b id='m-load'>0%</b></div>
       <div class='metric'>Конверсия <b id='m-conversion'>0%</b></div>
       </div>
+    <div class='hero-visual'>
+      <img src='https://images.unsplash.com/photo-1494412651409-8963ce7935a7?auto=format&fit=crop&w=1600&q=80' alt='Пассажирский транспорт на маршруте'>
+    </div>
+    <div class='photo-grid' id='photo-gallery'>
+      <div class='photo-card'>
+        <img src='https://images.unsplash.com/photo-1474487548417-781cb71495f3?auto=format&fit=crop&w=1200&q=80' alt='Автобус на трассе'>
+        <p>Надёжные междугородние рейсы</p>
+      </div>
+      <div class='photo-card'>
+        <img src='https://images.unsplash.com/photo-1502920917128-1aa500764ce7?auto=format&fit=crop&w=1200&q=80' alt='Дорога и логистика'>
+        <p>Гибкая логистика и прогнозирование</p>
+      </div>
+      <div class='photo-card'>
+        <img src='https://images.unsplash.com/photo-1515169067868-5387ec356754?auto=format&fit=crop&w=1200&q=80' alt='Комфорт для пассажиров'>
+        <p>Комфорт и сервис для пассажиров</p>
+      </div>
+      <div class='photo-card'>
+        <img src='https://images.unsplash.com/photo-1473396413399-6717e31f5e0b?auto=format&fit=crop&w=1200&q=80' alt='Передача посылок'>
+        <p>Безопасная отправка передачек</p>
+      </div>
+    </div>
 
       <div id='status' class='status'>Готово к работе</div>
       <div class='split' style='margin-top:10px'>

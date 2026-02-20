@@ -15,6 +15,8 @@ class AppRenderingTests(unittest.TestCase):
         self.assertIn("contact-form", page)
         self.assertIn("cancel-booking-form", page)
         self.assertIn("route-admin-form", page)
+        self.assertIn("photo-gallery", page)
+        self.assertIn("unsplash.com", page)
 
     def test_manifest_data_is_pwa_ready(self):
         self.assertEqual(app.MANIFEST_JSON["display"], "standalone")
