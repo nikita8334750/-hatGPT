@@ -20,6 +20,11 @@ class LogisticsServiceTests(unittest.TestCase):
         self.assertEqual(booking.booking_id, 1)
         self.assertEqual(self.service.segments["R1"].available_seats, 17)
 
+    def test_cancel_booking(self):
+        booking = self.service.book_seats("R1", "Алия", 3)
+        self.service.cancel_booking(booking.booking_id)
+        self.assertEqual(self.service.segments["R1"].available_seats, 20)
+
     def test_book_seats_over_capacity(self):
         with self.assertRaises(ValueError):
             self.service.book_seats("R1", "Алия", 30)
@@ -28,6 +33,17 @@ class LogisticsServiceTests(unittest.TestCase):
         parcel = self.service.register_parcel("R3", "Бек", "Руслан", "Документы")
         self.assertEqual(parcel.parcel_id, 1)
         self.assertEqual(parcel.description, "Документы")
+
+    def test_cancel_parcel(self):
+        parcel = self.service.register_parcel("R3", "Бек", "Руслан", "Документы")
+        self.service.cancel_parcel(parcel.parcel_id)
+        self.assertEqual(self.service.parcels, {})
+
+    def test_upsert_route_and_delete_route(self):
+        self.service.upsert_route(RouteSegment("R100", "Астана", "Павлодар", "10:00", "13:00", 25, "Тест Водитель"))
+        self.assertIn("R100", self.service.segments)
+        self.service.delete_route("R100")
+        self.assertNotIn("R100", self.service.segments)
 
     def test_schedule_for_driver_case_insensitive(self):
         schedule = self.service.schedule_for_driver("иван петров")

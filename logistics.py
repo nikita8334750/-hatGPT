@@ -48,7 +48,22 @@ class LogisticsService:
     """Сервис перевозок: маршруты, расписание, бронирование, передачки."""
 
     def __init__(self, segments: List[RouteSegment]) -> None:
-        self.segments: Dict[str, RouteSegment] = {segment.route_id: segment for segment in segments}
+        cloned_segments = [
+            RouteSegment(
+                segment.route_id,
+                segment.departure_city,
+                segment.arrival_city,
+                segment.departure_time,
+                segment.arrival_time,
+                segment.capacity,
+                segment.driver_name,
+            )
+            for segment in segments
+        ]
+        for index, segment in enumerate(segments):
+            cloned_segments[index].available_seats = segment.available_seats
+
+        self.segments: Dict[str, RouteSegment] = {segment.route_id: segment for segment in cloned_segments}
         self.bookings: Dict[int, Booking] = {}
         self.parcels: Dict[int, ParcelOrder] = {}
         self._booking_counter = 1
@@ -60,7 +75,7 @@ class LogisticsService:
         arrival_city: str,
         earliest_departure: Optional[str] = None,
     ) -> List[RouteSegment]:
-        """Находит маршрут(ы) с минимальным временем прибытия из A в B."""
+        """Находит маршрут с минимальным временем прибытия из A в B."""
         start_time = parse_time(earliest_departure) if earliest_departure else parse_time("00:00")
 
         graph: Dict[str, List[RouteSegment]] = {}
@@ -105,6 +120,32 @@ class LogisticsService:
         result.reverse()
         return result
 
+    def upsert_route(self, segment: RouteSegment) -> RouteSegment:
+        existing = self.segments.get(segment.route_id)
+        if existing:
+            # сохраняем относительное состояние мест при обновлении capacity
+            used = existing.capacity - existing.available_seats
+            existing.departure_city = segment.departure_city
+            existing.arrival_city = segment.arrival_city
+            existing.departure_time = segment.departure_time
+            existing.arrival_time = segment.arrival_time
+            existing.capacity = segment.capacity
+            existing.driver_name = segment.driver_name
+            existing.available_seats = max(segment.capacity - used, 0)
+            return existing
+
+        self.segments[segment.route_id] = segment
+        return segment
+
+    def delete_route(self, route_id: str) -> None:
+        if route_id not in self.segments:
+            raise ValueError("Маршрут не найден")
+        if any(booking.route_id == route_id for booking in self.bookings.values()):
+            raise ValueError("Нельзя удалить маршрут с активными бронированиями")
+        if any(parcel.route_id == route_id for parcel in self.parcels.values()):
+            raise ValueError("Нельзя удалить маршрут с активными передачками")
+        del self.segments[route_id]
+
     def book_seats(self, route_id: str, passenger_name: str, seats: int) -> Booking:
         if seats <= 0:
             raise ValueError("Количество мест должно быть положительным")
@@ -126,6 +167,15 @@ class LogisticsService:
         self._booking_counter += 1
         return booking
 
+    def cancel_booking(self, booking_id: int) -> None:
+        booking = self.bookings.get(booking_id)
+        if not booking:
+            raise ValueError("Бронь не найдена")
+        segment = self.segments.get(booking.route_id)
+        if segment:
+            segment.available_seats = min(segment.capacity, segment.available_seats + booking.seats)
+        del self.bookings[booking_id]
+
     def register_parcel(
         self,
         route_id: str,
@@ -146,6 +196,11 @@ class LogisticsService:
         self.parcels[self._parcel_counter] = parcel
         self._parcel_counter += 1
         return parcel
+
+    def cancel_parcel(self, parcel_id: int) -> None:
+        if parcel_id not in self.parcels:
+            raise ValueError("Передачка не найдена")
+        del self.parcels[parcel_id]
 
     def schedule_for_driver(self, driver_name: str) -> List[RouteSegment]:
         return sorted(

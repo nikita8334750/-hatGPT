@@ -13,6 +13,8 @@ class AppRenderingTests(unittest.TestCase):
         self.assertIn("heal-now", page)
         self.assertIn("Enterprise-уровень", page)
         self.assertIn("contact-form", page)
+        self.assertIn("cancel-booking-form", page)
+        self.assertIn("route-admin-form", page)
 
     def test_manifest_data_is_pwa_ready(self):
         self.assertEqual(app.MANIFEST_JSON["display"], "standalone")
@@ -46,6 +48,7 @@ class AppRenderingTests(unittest.TestCase):
 
     def test_contact_request_validation(self):
         self.assertTrue("/api/contact" in app.__dict__["render_page"]())
+        self.assertTrue("/api/route/upsert" in app.__dict__["LogisticsHandler"].do_POST.__code__.co_consts)
 
 
 if __name__ == "__main__":

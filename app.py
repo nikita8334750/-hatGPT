@@ -46,6 +46,23 @@ class SelfHealingLogistics:
                         event["recipient_name"],
                         event["description"],
                     )
+                if event["type"] == "cancel_booking":
+                    self.service.cancel_booking(event["booking_id"])
+                if event["type"] == "cancel_parcel":
+                    self.service.cancel_parcel(event["parcel_id"])
+                if event["type"] == "upsert_route":
+                    route = RouteSegment(
+                        event["route_id"],
+                        event["departure_city"],
+                        event["arrival_city"],
+                        event["departure_time"],
+                        event["arrival_time"],
+                        int(event["capacity"]),
+                        event["driver_name"],
+                    )
+                    self.service.upsert_route(route)
+                if event["type"] == "delete_route":
+                    self.service.delete_route(event["route_id"])
             except ValueError:
                 continue
 
@@ -72,6 +89,9 @@ class SelfHealingLogistics:
                 "seats": booking.seats,
             }
         )
+
+    def record_event(self, payload: Dict[str, Any]) -> None:
+        self.events.append(payload)
 
     def record_parcel(self, parcel: ParcelOrder) -> None:
         self.events.append(
@@ -194,7 +214,7 @@ const panels = document.querySelectorAll('.panel');
 for (const btn of tabs) { btn.addEventListener('click', () => { tabs.forEach(x => x.classList.remove('active')); panels.forEach(x => x.classList.remove('active')); btn.classList.add('active'); document.getElementById(btn.dataset.target).classList.add('active'); }); }
 
 function setStatus(msg, isError = false) { el.status.textContent = msg; el.status.classList.toggle('error', isError); }
-function routeRow(route) { return `<tr><td>${route.route_id}</td><td>${route.departure_city} → ${route.arrival_city}</td><td>${route.departure_time} - ${route.arrival_time}</td><td>${route.driver_name}</td><td>${route.available_seats}</td></tr>`; }
+  metrics: { routes: document.getElementById('m-routes'), seats: document.getElementById('m-seats'), bookings: document.getElementById('m-bookings'), parcels: document.getElementById('m-parcels'), load: document.getElementById('m-load'), conversion: document.getElementById('m-conversion') },
 
 function saveRecent(entry) {
   const compact = `${entry.from}→${entry.to} (${entry.time || 'любой'})`;
@@ -276,6 +296,11 @@ function bindSubmit(id, handler) {
 }
 
 bindSubmit('route-form', async (fd) => {
+
+  const analyticsRes = await fetch('/api/analytics');
+  const analytics = await analyticsRes.json();
+  el.metrics.load.textContent = `${analytics.load_factor_percent}%`;
+  el.metrics.conversion.textContent = `${analytics.conversion_percent}%`;
   const payload = { departure_city: fd.get('departure_city'), arrival_city: fd.get('arrival_city'), earliest_departure: fd.get('earliest_departure') || null };
   const result = await api('/api/navigation-guide', payload);
   if (!result.ok) throw new Error(result.error);
@@ -327,6 +352,38 @@ def segment_to_dict(segment: RouteSegment) -> Dict[str, object]:
         "departure_time": segment.departure_time,
         "arrival_time": segment.arrival_time,
         "driver_name": segment.driver_name,
+bindSubmit('cancel-booking-form', async (fd) => {
+  const result = await api('/api/booking/cancel', { booking_id: Number(fd.get('booking_id')) });
+  if (!result.ok) throw new Error(result.error);
+  setStatus('Бронь отменена и места восстановлены');
+});
+
+bindSubmit('cancel-parcel-form', async (fd) => {
+  const result = await api('/api/parcel/cancel', { parcel_id: Number(fd.get('parcel_id')) });
+  if (!result.ok) throw new Error(result.error);
+  setStatus('Передачка отменена');
+});
+
+bindSubmit('route-admin-form', async (fd) => {
+  const result = await api('/api/route/upsert', {
+    route_id: fd.get('route_id'),
+    departure_city: fd.get('departure_city'),
+    arrival_city: fd.get('arrival_city'),
+    departure_time: fd.get('departure_time'),
+    arrival_time: fd.get('arrival_time'),
+    capacity: Number(fd.get('capacity')),
+    driver_name: fd.get('driver_name'),
+  });
+  if (!result.ok) throw new Error(result.error);
+  setStatus('Маршрут сохранён');
+});
+
+bindSubmit('route-delete-form', async (fd) => {
+  const result = await api('/api/route/delete', { route_id: fd.get('route_id') });
+  if (!result.ok) throw new Error(result.error);
+  setStatus('Маршрут удалён');
+});
+
 bindSubmit('contact-form', async (fd) => {
   const result = await api('/api/contact', {
     name: fd.get('name'),
@@ -437,6 +494,8 @@ def render_page() -> str:
           <button id='departures-refresh' type='button'>Обновить табло</button>
         </div>
         <div id='departures-list' class='list'></div>
+      <div class='metric'>Заполняемость <b id='m-load'>0%</b></div>
+      <div class='metric'>Конверсия <b id='m-conversion'>0%</b></div>
       </div>
 
       <div id='status' class='status'>Готово к работе</div>
@@ -544,6 +603,36 @@ class LogisticsHandler(BaseHTTPRequestHandler):
             self._send_json(MANIFEST_JSON)
             return
         if path == "/service-worker.js":
+
+        <form id='cancel-booking-form' class='form'>
+          <b>Отменить бронь</b>
+          <input name='booking_id' class='input' type='number' min='1' placeholder='ID брони' required>
+          <button class='ghost'>Отменить бронь</button>
+        </form>
+
+        <form id='cancel-parcel-form' class='form'>
+          <b>Отменить передачку</b>
+          <input name='parcel_id' class='input' type='number' min='1' placeholder='ID передачки' required>
+          <button class='ghost'>Отменить передачку</button>
+        </form>
+
+        <form id='route-admin-form' class='form'>
+          <b>Управление маршрутом (создать/обновить)</b>
+          <input name='route_id' class='input' placeholder='ID маршрута' required>
+          <input name='departure_city' class='input' placeholder='Город отправления' required>
+          <input name='arrival_city' class='input' placeholder='Город прибытия' required>
+          <input name='departure_time' class='input' placeholder='Время отправления HH:MM' required>
+          <input name='arrival_time' class='input' placeholder='Время прибытия HH:MM' required>
+          <input name='capacity' class='input' type='number' min='1' placeholder='Вместимость' required>
+          <input name='driver_name' class='input' placeholder='Водитель' required>
+          <button>Сохранить маршрут</button>
+        </form>
+
+        <form id='route-delete-form' class='form'>
+          <b>Удалить маршрут</b>
+          <input name='route_id' class='input' placeholder='ID маршрута' required>
+          <button class='ghost'>Удалить маршрут</button>
+        </form>
             self._send(200, SERVICE_WORKER_JS, "application/javascript; charset=utf-8")
             return
         if path == "/api/state":
@@ -632,6 +721,18 @@ class LogisticsHandler(BaseHTTPRequestHandler):
                         lambda service: service.book_seats(
                             str(data.get("route_id", "")),
                             str(data.get("passenger_name", "")),
+        if path == "/api/analytics":
+            payload = self._state_payload()
+            routes = payload["routes"]
+            bookings = payload["bookings"]
+            parcels = payload["parcels"]
+            total_capacity = sum((service_manager.service.segments[r["route_id"]].capacity for r in routes if r["route_id"] in service_manager.service.segments), 0)
+            free_seats = sum(r["available_seats"] for r in routes)
+            occupied = max(total_capacity - free_seats, 0)
+            load = int((occupied / total_capacity) * 100) if total_capacity else 0
+            conversion = int((len(bookings) / len(routes)) * 100) if routes else 0
+            self._send_json({"load_factor_percent": load, "conversion_percent": conversion, "parcels_count": len(parcels)})
+            return
                             int(data.get("seats", 0)),
                         ),
                         "book",
@@ -702,6 +803,51 @@ if __name__ == "__main__":
                     if not name or not email or not message:
                         raise ValueError("Заполните обязательные поля заявки")
                     ticket = f"REQ-{len(CONTACT_REQUESTS) + 1:05d}"
+                if path == "/api/booking/cancel":
+                    booking_id = int(data.get("booking_id", 0))
+                    service_manager.run(lambda service: service.cancel_booking(booking_id), "cancel_booking")
+                    service_manager.record_event({"type": "cancel_booking", "booking_id": booking_id})
+                    self._send_json({"ok": True})
+                    return
+
+                if path == "/api/parcel/cancel":
+                    parcel_id = int(data.get("parcel_id", 0))
+                    service_manager.run(lambda service: service.cancel_parcel(parcel_id), "cancel_parcel")
+                    service_manager.record_event({"type": "cancel_parcel", "parcel_id": parcel_id})
+                    self._send_json({"ok": True})
+                    return
+
+                if path == "/api/route/upsert":
+                    route = RouteSegment(
+                        str(data.get("route_id", "")),
+                        str(data.get("departure_city", "")),
+                        str(data.get("arrival_city", "")),
+                        str(data.get("departure_time", "")),
+                        str(data.get("arrival_time", "")),
+                        int(data.get("capacity", 0)),
+                        str(data.get("driver_name", "")),
+                    )
+                    service_manager.run(lambda service: service.upsert_route(route), "route_upsert")
+                    service_manager.record_event({
+                        "type": "upsert_route",
+                        "route_id": route.route_id,
+                        "departure_city": route.departure_city,
+                        "arrival_city": route.arrival_city,
+                        "departure_time": route.departure_time,
+                        "arrival_time": route.arrival_time,
+                        "capacity": route.capacity,
+                        "driver_name": route.driver_name,
+                    })
+                    self._send_json({"ok": True})
+                    return
+
+                if path == "/api/route/delete":
+                    route_id = str(data.get("route_id", ""))
+                    service_manager.run(lambda service: service.delete_route(route_id), "route_delete")
+                    service_manager.record_event({"type": "delete_route", "route_id": route_id})
+                    self._send_json({"ok": True})
+                    return
+
                     CONTACT_REQUESTS.append({
                         "ticket": ticket,
                         "name": name,
