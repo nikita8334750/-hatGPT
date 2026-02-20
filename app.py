@@ -96,6 +96,7 @@ class SelfHealingLogistics:
 
 
 service_manager = SelfHealingLogistics(SAMPLE_SEGMENTS)
+CONTACT_REQUESTS: List[Dict[str, str]] = []
 
 MANIFEST_JSON = {
     "name": "Логистика перевозок",
@@ -161,6 +162,13 @@ button.ghost { background: rgba(255,255,255,.08); border: 1px solid var(--line);
 .item { border: 1px solid rgba(255,255,255,.12); border-radius: 10px; background: rgba(255,255,255,.05); padding: 8px; font-size: 13px; }
 .mobile-nav { display: none; position: fixed; left: 10px; right: 10px; bottom: 10px; border: 1px solid var(--line); background: rgba(16,24,44,.93); border-radius: 12px; padding: 6px; gap: 6px; }
 .mobile-nav a { flex: 1; text-align: center; text-decoration: none; color: var(--text); font-size: 12px; background: rgba(255,255,255,.08); padding: 8px 6px; border-radius: 8px; }
+.site-nav { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+.site-nav a { color: var(--text); text-decoration:none; padding:7px 11px; border:1px solid var(--line); border-radius:999px; background: rgba(255,255,255,.06); font-size:13px; }
+.enterprise-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:10px; margin-top:10px; }
+.enterprise-card { border:1px solid var(--line); background: rgba(255,255,255,.06); border-radius:12px; padding:12px; }
+.enterprise-card h3 { margin:0 0 6px; font-size:15px; }
+.faq details { border:1px solid var(--line); border-radius:10px; padding:10px; background: rgba(255,255,255,.05); margin-bottom:8px; }
+.footer { margin-top:14px; border:1px solid var(--line); border-radius:12px; padding:12px; color: var(--muted); font-size:13px; }
 @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
 @media (max-width: 760px) {
   .container { padding: 12px 10px 88px; }
@@ -319,6 +327,17 @@ def segment_to_dict(segment: RouteSegment) -> Dict[str, object]:
         "departure_time": segment.departure_time,
         "arrival_time": segment.arrival_time,
         "driver_name": segment.driver_name,
+bindSubmit('contact-form', async (fd) => {
+  const result = await api('/api/contact', {
+    name: fd.get('name'),
+    email: fd.get('email'),
+    company: fd.get('company'),
+    message: fd.get('message'),
+  });
+  if (!result.ok) throw new Error(result.error);
+  setStatus(`Заявка отправлена. Тикет: ${result.ticket}`);
+});
+
         "available_seats": segment.available_seats,
     }
 
@@ -528,6 +547,38 @@ class LogisticsHandler(BaseHTTPRequestHandler):
             self._send(200, SERVICE_WORKER_JS, "application/javascript; charset=utf-8")
             return
         if path == "/api/state":
+
+  <section id='enterprise' class='card' style='margin-top:12px'>
+    <h2>Enterprise-уровень (уровень проекта за $1M)</h2>
+    <div class='site-nav'>
+      <a href='#dashboard'>Операционный центр</a><a href='#actions'>Управление</a><a href='#enterprise'>Enterprise</a><a href='#support'>Support</a>
+    </div>
+    <div class='enterprise-grid'>
+      <div class='enterprise-card'><h3>SLA 99.95%</h3><div class='muted'>Мониторинг, алерты и самовосстановление.</div></div>
+      <div class='enterprise-card'><h3>Безопасность</h3><div class='muted'>Журнал событий, контроль доступов, трассировка ошибок.</div></div>
+      <div class='enterprise-card'><h3>Продуктовая аналитика</h3><div class='muted'>KPI по рейсам, местам, заявкам и работе поддержки.</div></div>
+      <div class='enterprise-card'><h3>Клиентский успех</h3><div class='muted'>Поддержка 24/7, onboarding и персональный менеджер.</div></div>
+    </div>
+  </section>
+
+  <section id='support' class='card' style='margin-top:12px'>
+    <h2>Поддержка и продажи</h2>
+    <form id='contact-form' class='form'>
+      <b>Запросить демо / консультацию</b>
+      <input name='name' class='input' placeholder='Имя' required>
+      <input name='email' class='input' placeholder='Email' required>
+      <input name='company' class='input' placeholder='Компания'>
+      <input name='message' class='input' placeholder='Что требуется внедрить' required>
+      <button>Отправить заявку</button>
+    </form>
+    <div class='faq' style='margin-top:10px'>
+      <details><summary>Есть ли SLA и ответственность?</summary><div class='muted'>Да, в enterprise-контракте фиксируются SLA, штрафы и KPI.</div></details>
+      <details><summary>Есть ли кастомизация под бизнес?</summary><div class='muted'>Да, поддерживаются кастомные роли, интеграции и брендирование.</div></details>
+      <details><summary>Есть ли миграция данных?</summary><div class='muted'>Да, предусмотрен onboarding и миграция с legacy-систем.</div></details>
+    </div>
+  </section>
+
+  <footer class='footer'>© 2026 Logistics Enterprise Platform · Политика конфиденциальности · Условия обслуживания · Security & Compliance</footer>
             self._send_json(self._state_payload())
             return
         if path == "/api/health":
@@ -644,3 +695,20 @@ def run() -> None:
 
 if __name__ == "__main__":
     run()
+                if path == "/api/contact":
+                    name = str(data.get("name", "")).strip()
+                    email = str(data.get("email", "")).strip()
+                    message = str(data.get("message", "")).strip()
+                    if not name or not email or not message:
+                        raise ValueError("Заполните обязательные поля заявки")
+                    ticket = f"REQ-{len(CONTACT_REQUESTS) + 1:05d}"
+                    CONTACT_REQUESTS.append({
+                        "ticket": ticket,
+                        "name": name,
+                        "email": email,
+                        "company": str(data.get("company", "")).strip(),
+                        "message": message,
+                    })
+                    self._send_json({"ok": True, "ticket": ticket})
+                    return
+

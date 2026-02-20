@@ -11,6 +11,8 @@ class AppRenderingTests(unittest.TestCase):
         self.assertIn("departures-refresh", page)
         self.assertIn("recent-searches", page)
         self.assertIn("heal-now", page)
+        self.assertIn("Enterprise-уровень", page)
+        self.assertIn("contact-form", page)
 
     def test_manifest_data_is_pwa_ready(self):
         self.assertEqual(app.MANIFEST_JSON["display"], "standalone")
@@ -41,6 +43,9 @@ class AppRenderingTests(unittest.TestCase):
         manager.heal("manual")
         self.assertEqual(manager.heal_count, 1)
         self.assertEqual(manager.service.segments["R1"].available_seats, 18)
+
+    def test_contact_request_validation(self):
+        self.assertTrue("/api/contact" in app.__dict__["render_page"]())
 
 
 if __name__ == "__main__":
