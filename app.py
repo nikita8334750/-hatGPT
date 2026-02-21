@@ -67,15 +67,21 @@ class SelfHealingLogistics:
             except ValueError:
                 continue
 
-    def heal(self, reason: str) -> None:
-        self.heal_count += 1
+    def heal(self, reason: str, count_as_heal: bool = True) -> None:
+        if count_as_heal:
+            self.heal_count += 1
         self.last_error = reason
         self.service = LogisticsService(self._clone_seed_segments())
         self._replay_events()
 
+    def restore_runtime(self) -> None:
+        self.heal("restore_runtime", count_as_heal=False)
+
     def run(self, operation: Callable[[LogisticsService], Any], label: str = "operation") -> Any:
         try:
             return operation(self.service)
+        except ValueError:
+            raise
         except Exception as exc:
             self.errors_count += 1
             self.heal(f"{label}: {exc}")
@@ -143,7 +149,7 @@ def load_runtime_state() -> None:
         service_manager.last_error = str(payload.get("last_error", ""))
         CONTACT_REQUESTS.clear()
         CONTACT_REQUESTS.extend(payload.get("contacts", []))
-        service_manager.heal("restore_from_disk")
+        service_manager.restore_runtime()
     except (ValueError, json.JSONDecodeError):
         return
 

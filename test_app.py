@@ -53,6 +53,12 @@ class AppRenderingTests(unittest.TestCase):
         self.assertTrue("/api/route/upsert" in app.__dict__["LogisticsHandler"].do_POST.__code__.co_consts)
         self.assertTrue("/api/docs" in app.__dict__["LogisticsHandler"].do_GET.__code__.co_consts)
 
+    def test_self_healing_validation_error_does_not_trigger_heal(self):
+        manager = app.SelfHealingLogistics(app.SAMPLE_SEGMENTS)
+        with self.assertRaises(ValueError):
+            manager.run(lambda svc: svc.book_seats("R1", "Тест", 9999), "book_invalid")
+        self.assertEqual(manager.heal_count, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
