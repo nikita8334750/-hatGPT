@@ -1,0 +1,32 @@
+services:
+  bot:
+    build: .
+    environment:
+      BOT_TOKEN: "${BOT_TOKEN}"
+      REDIS_URL: "redis://redis:6379/0"
+      PROVIDER_URL: "${PROVIDER_URL:-https://api.example.com/latest}"
+      RATES_API_KEY: "${RATES_API_KEY}"
+      UPDATE_INTERVAL_SECONDS: "${UPDATE_INTERVAL_SECONDS:-60}"
+      DEFAULT_BASE: "${DEFAULT_BASE:-USD}"
+      MAX_STALENESS_SECONDS: "${MAX_STALENESS_SECONDS:-3600}"
+      WATCH_COOLDOWN_SECONDS: "${WATCH_COOLDOWN_SECONDS:-300}"
+      RATE_LIMIT_SECONDS: "${RATE_LIMIT_SECONDS:-2}"
+      ENABLE_HISTORY: "${ENABLE_HISTORY:-false}"
+      POSTGRES_DSN: "${POSTGRES_DSN}"
+    depends_on:
+      - redis
+    restart: unless-stopped
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+  postgres:
+    image: postgres:16
+    profiles: ["history"]
+    environment:
+      POSTGRES_USER: "bot"
+      POSTGRES_PASSWORD: "bot"
+      POSTGRES_DB: "rates"
+    ports:
+      - "5432:5432"
