@@ -6,13 +6,23 @@ from aiogram import F, Router
 from aiogram.types import Message
 
 from app.bot.parsing import (
+    parse_chart_args,
     parse_convert_args,
     parse_history_args,
+    parse_movers_args,
     parse_precision_args,
     parse_rate_args,
+    parse_trend_args,
     parse_watch_args,
 )
 from app.bot.rate_limit import RateLimiter
+from app.services.analytics import (
+    analyze_trend,
+    format_trend_report,
+    generate_ascii_chart,
+    get_rate_history,
+    get_top_movers,
+)
 from app.services.conversion import convert_amount, format_decimal, get_rate
 from app.services.history import HistoryWriter
 from app.services.watches import add_watch
@@ -64,7 +74,10 @@ def setup_router(
             "/watchlist\n"
             "/unwatch <id>\n"
             "/currencies\n"
-            "/history <FROM> <TO> 24h|7d"
+            "/history <FROM> <TO> 24h|7d\n"
+            "/trend EURUSD or /trend EUR USD\n"
+            "/chart EUR USD [width] [height]\n"
+            "/movers [limit]"
         )
 
     @router.message(F.text.startswith("/status"))
@@ -279,5 +292,82 @@ def setup_router(
         await message.answer(
             f"History {from_ccy}/{to_ccy} ({window}):\n" + "\n".join(lines)
         )
+
+    @router.message(F.text.startswith("/trend"))
+    async def cmd_trend(message: Message) -> None:
+        if rate_limiter and not rate_limiter.allow(message.chat.id):
+            await message.answer("You're doing that too fast. Please wait a moment.")
+            return
+        args = message.text.removeprefix("/trend").strip()
+        parsed = parse_trend_args(args)
+        if not parsed:
+            await message.answer("Usage: /trend EURUSD or /trend EUR USD")
+            return
+        from_ccy, to_ccy = parsed
+        base = await store.get_chat_base(message.chat.id) or default_base
+        snapshot = await _get_snapshot(store, base)
+        if not snapshot:
+            await message.answer("Rates not available yet.")
+            return
+        try:
+            current_rate = get_rate(snapshot, from_ccy, to_ccy)
+        except KeyError as exc:
+            await message.answer(f"Unknown currency: {exc.args[0]}")
+            return
+        precision = await store.get_chat_precision(message.chat.id) or 4
+        trend = await analyze_trend(store, from_ccy, to_ccy, base, current_rate)
+        report = format_trend_report(trend, precision)
+        await message.answer(report)
+
+    @router.message(F.text.startswith("/chart"))
+    async def cmd_chart(message: Message) -> None:
+        if rate_limiter and not rate_limiter.allow(message.chat.id):
+            await message.answer("You're doing that too fast. Please wait a moment.")
+            return
+        args = message.text.removeprefix("/chart").strip()
+        parsed = parse_chart_args(args)
+        if not parsed:
+            await message.answer("Usage: /chart EUR USD [width] [height]")
+            return
+        from_ccy, to_ccy, width, height = parsed
+        base = await store.get_chat_base(message.chat.id) or default_base
+        points = await get_rate_history(store, from_ccy, to_ccy, base, limit=width * 2)
+        if not points:
+            await message.answer("No data available for chart.")
+            return
+        chart = generate_ascii_chart(points, width=width, height=height)
+        await message.answer(f"Chart: {from_ccy}/{to_ccy}\n\n{chart}")
+
+    @router.message(F.text.startswith("/movers"))
+    async def cmd_movers(message: Message) -> None:
+        if rate_limiter and not rate_limiter.allow(message.chat.id):
+            await message.answer("You're doing that too fast. Please wait a moment.")
+            return
+        args = message.text.removeprefix("/movers").strip()
+        limit = parse_movers_args(args)
+        if limit is None:
+            await message.answer("Usage: /movers [limit] (1-20)")
+            return
+        base = await store.get_chat_base(message.chat.id) or default_base
+        currencies = await store.get_currencies(base)
+        if not currencies:
+            snapshot = await _get_snapshot(store, base)
+            if not snapshot:
+                await message.answer("Currencies not available yet.")
+                return
+            currencies = sorted({snapshot.base, *snapshot.rates.keys()})
+        movers = await get_top_movers(store, base, currencies, limit)
+        if not movers:
+            await message.answer("No movers data available.")
+            return
+        
+        # Format with volatility info
+        lines = []
+        for i, m in enumerate(movers):
+            vol_indicator = "🔴" if m.volatility > Decimal('3') else "🟡" if m.volatility > Decimal('1') else "🟢"
+            lines.append(
+                f"{i+1}. {m.currency}: {m.change_percent:.2f}% {m.direction} {vol_indicator} (vol: {m.volatility:.2f}%)"
+            )
+        await message.answer(f"Top {len(movers)} movers vs {base}:\n" + "\n".join(lines))
 
     return router
