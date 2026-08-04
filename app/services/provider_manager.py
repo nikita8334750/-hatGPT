@@ -2,7 +2,6 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from threading import Lock
 
 from app.providers.base import RatesProvider
 
@@ -13,35 +12,31 @@ logger = logging.getLogger(__name__)
 class ProviderState:
     failure_count: int = 0
     fallback_until: datetime | None = None
-    _lock: Lock = field(default_factory=Lock, repr=False, compare=False)
 
     def record_failure(self, threshold: int = 5, fallback_minutes: int = 10) -> bool:
         """Record a failure and return True if circuit breaker tripped."""
-        with self._lock:
-            self.failure_count += 1
-            if self.failure_count >= threshold and not self.fallback_until:
-                self.fallback_until = datetime.now(timezone.utc) + timedelta(minutes=fallback_minutes)
-                logger.warning("Circuit breaker tripped; switching to fallback provider for %d minutes", fallback_minutes)
-                return True
-            return False
+        self.failure_count += 1
+        if self.failure_count >= threshold and not self.fallback_until:
+            self.fallback_until = datetime.now(timezone.utc) + timedelta(minutes=fallback_minutes)
+            logger.warning("Circuit breaker tripped; switching to fallback provider for %d minutes", fallback_minutes)
+            return True
+        return False
 
     def record_success(self) -> None:
         """Reset failure state on success."""
-        with self._lock:
-            self.failure_count = 0
-            self.fallback_until = None
+        self.failure_count = 0
+        self.fallback_until = None
 
     def should_use_fallback(self) -> bool:
         """Check if fallback provider should be used."""
-        with self._lock:
-            if not self.fallback_until:
-                return False
-            if datetime.now(timezone.utc) >= self.fallback_until:
-                self.fallback_until = None
-                self.failure_count = 0
-                logger.info("Circuit breaker reset; switching back to primary provider")
-                return False
-            return True
+        if not self.fallback_until:
+            return False
+        if datetime.now(timezone.utc) >= self.fallback_until:
+            self.fallback_until = None
+            self.failure_count = 0
+            logger.info("Circuit breaker reset; switching back to primary provider")
+            return False
+        return True
 
 
 class ProviderManager:

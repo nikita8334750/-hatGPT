@@ -29,7 +29,12 @@ async def request_with_retries(
                 params=params,
                 timeout=timeout,
             )
-            response.raise_for_status()
+            if response.status_code >= 400:
+                raise httpx.HTTPStatusError(
+                    f"HTTP {response.status_code}",
+                    request=response.request,
+                    response=response,
+                )
             return response
         except (httpx.HTTPStatusError, httpx.RequestError, httpx.TimeoutException) as exc:
             last_exc = exc

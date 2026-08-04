@@ -71,11 +71,15 @@ async def update_once(
         staleness = _staleness_seconds(snapshot.fetched_at)
         await store.set_last_success(provider.name, staleness)
         if history_writer:
-            await history_writer(snapshot)
+            try:
+                await history_writer(snapshot)
+            except Exception as exc:
+                logger.warning("Failed to write history: %s", exc)
         await evaluate_watches(bot, store, snapshot, cooldown_seconds)
         manager.record_success()
         logger.info("Rates updated using %s", provider.name)
     except Exception as exc:
         manager.record_failure()
-        await store.set_last_error(str(exc))
+        error_msg = str(exc)[:500]  # Limit error message size
+        await store.set_last_error(error_msg)
         logger.warning("Rates update failed: %s", exc, exc_info=True)

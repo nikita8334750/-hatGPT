@@ -69,6 +69,8 @@ class RedisStore:
         )
 
     async def set_chat_base(self, chat_id: int, base: str) -> None:
+        if not base.isalpha() or len(base) > 3:
+            raise ValueError("Invalid currency code")
         await self._redis.set(f"chat:{chat_id}:base", base.upper())
         await self._redis.sadd("bases", base.upper())
 
@@ -77,6 +79,8 @@ class RedisStore:
         return raw.decode() if raw else None
 
     async def add_base(self, base: str) -> None:
+        if not base.isalpha() or len(base) > 3:
+            raise ValueError("Invalid currency code")
         await self._redis.sadd("bases", base.upper())
 
     async def list_bases(self) -> list[str]:
@@ -132,7 +136,7 @@ class RedisStore:
             HealthStatus(
                 active_provider=health.active_provider,
                 last_success_at=health.last_success_at,
-                last_error=error,
+                last_error=error[:500] if error else None,  # Limit error message size
                 staleness_seconds=health.staleness_seconds,
             )
         )
