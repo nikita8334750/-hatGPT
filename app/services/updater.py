@@ -31,6 +31,7 @@ async def run_updater(
     cooldown_seconds: int,
     history_writer: Callable[[RatesSnapshot], Awaitable[None]] | None = None,
 ) -> None:
+    """Run the background rate updater loop."""
     while True:
         bases = await store.list_bases()
         if not bases:
@@ -55,6 +56,7 @@ async def update_once(
     cooldown_seconds: int,
     history_writer: Callable[[RatesSnapshot], Awaitable[None]] | None = None,
 ) -> None:
+    """Fetch rates once and update storage, watches, and history."""
     provider = manager.active_provider()
     try:
         as_of, rates = await provider.get_latest(base)
@@ -76,4 +78,4 @@ async def update_once(
     except Exception as exc:
         manager.record_failure()
         await store.set_last_error(str(exc))
-        logger.warning("Rates update failed: %s", exc)
+        logger.warning("Rates update failed: %s", exc, exc_info=True)
