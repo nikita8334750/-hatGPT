@@ -44,10 +44,11 @@ async def add_watch(
     target: str,
     baseline_rate: Decimal,
 ) -> Watch:
+    """Add a new watch for currency pair."""
     watch = Watch(
         id=str(uuid4())[:8],
-        from_ccy=from_ccy,
-        to_ccy=to_ccy,
+        from_ccy=from_ccy.upper(),
+        to_ccy=to_ccy.upper(),
         watch_type="percent" if target.endswith("%") else "target",
         target=target,
         baseline_rate=str(baseline_rate),
@@ -64,15 +65,20 @@ async def evaluate_watches(
     snapshot: RatesSnapshot,
     cooldown_seconds: int,
 ) -> None:
+    """Evaluate all watches and send notifications if triggered."""
     chat_ids = await store.list_watch_chats()
     for chat_id in chat_ids:
         watches = await store.list_watches(chat_id)
+        updated_watches = []
         for watch in watches:
             if not _cooldown_elapsed(watch.get("last_notified_at"), cooldown_seconds):
+                updated_watches.append(watch)
                 continue
             try:
                 rate = get_rate(snapshot, watch["from_ccy"], watch["to_ccy"])
             except KeyError:
+                logger.warning("Currency pair %s/%s not found in snapshot", watch["from_ccy"], watch["to_ccy"])
+                updated_watches.append(watch)
                 continue
             baseline = Decimal(watch["baseline_rate"])
             triggered = False
@@ -97,6 +103,8 @@ async def evaluate_watches(
             if triggered:
                 try:
                     await bot.send_message(chat_id, message)
-                    await store.update_watch_last_notified(chat_id, watch["id"], _now_iso())
+                    watch = {**watch, "last_notified_at": _now_iso()}
                 except Exception as exc:
                     logger.warning("Failed to notify watch %s: %s", watch["id"], exc)
+            updated_watches.append(watch)
+        await store.set_watches(chat_id, updated_watches)
