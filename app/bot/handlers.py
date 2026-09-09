@@ -205,9 +205,9 @@ def setup_router(
             currencies = sorted({snapshot.base, *snapshot.rates.keys()})
         warning = _staleness_warning(snapshot.fetched_at, max_staleness_seconds)
         await message.answer(
-            f"Available currencies for {base}:\\n"
-            + \", \".join(currencies)
-            + f\"\\n{_format_snapshot(snapshot)}\"
+            f"Available currencies for {base}:\n"
+            + ", ".join(currencies)
+            + f"\n{_format_snapshot(snapshot)}"
             + warning
         )
 
